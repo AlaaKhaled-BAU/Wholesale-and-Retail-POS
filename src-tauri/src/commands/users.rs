@@ -28,7 +28,7 @@ pub fn login_user(pin: String, state: State<AppState>) -> Result<SessionToken, S
 
     for user in users {
         let (id, branch_id, name_ar, role, pin_hash) = user.map_err(|e| e.to_string())?;
-        if verify(&pin, &pin_hash).map_err(|e| e.to_string())? {
+        if verify(pin.trim(), &pin_hash).map_err(|e| e.to_string())? {
             return Ok(SessionToken {
                 user_id: id,
                 name_ar,

@@ -72,9 +72,9 @@ export const useAuthStore = create<AuthState>()(
           }
 
           return false;
-        } catch (error) {
+        } catch (error: any) {
           set({ isLoading: false });
-          useToastStore.getState().addToast('حدث خطأ أثناء تسجيل الدخول', 'error');
+          useToastStore.getState().addToast(error?.toString() || 'حدث خطأ أثناء تسجيل الدخول', 'error');
           return false;
         }
       },

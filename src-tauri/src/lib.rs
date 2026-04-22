@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 // ============================================================
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Branch {
     pub id: String,
     pub name_ar: String,
@@ -16,6 +17,7 @@ pub struct Branch {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct User {
     pub id: String,
     pub branch_id: String,
@@ -26,6 +28,7 @@ pub struct User {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionToken {
     pub user_id: String,
     pub name_ar: String,
@@ -35,6 +38,7 @@ pub struct SessionToken {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Category {
     pub id: String,
     pub name_ar: String,
@@ -42,6 +46,7 @@ pub struct Category {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Product {
     pub id: String,
     pub sku: String,
@@ -60,6 +65,7 @@ pub struct Product {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct NewProduct {
     pub sku: Option<String>,
     pub barcode: Option<String>,
@@ -73,6 +79,7 @@ pub struct NewProduct {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct InventoryItem {
     pub id: String,
     pub branch_id: String,
@@ -88,6 +95,7 @@ pub struct InventoryItem {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Customer {
     pub id: String,
     pub name_ar: String,
@@ -101,6 +109,7 @@ pub struct Customer {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct NewCustomer {
     pub name_ar: String,
     pub phone: Option<String>,
@@ -111,6 +120,7 @@ pub struct NewCustomer {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct CashierSession {
     pub id: String,
     pub user_id: String,
@@ -123,6 +133,7 @@ pub struct CashierSession {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Invoice {
     pub id: String,
     pub uuid: String,
@@ -148,6 +159,7 @@ pub struct Invoice {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct InvoiceLine {
     pub id: String,
     pub invoice_id: String,
@@ -162,6 +174,7 @@ pub struct InvoiceLine {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Payment {
     pub id: String,
     pub invoice_id: String,
@@ -173,6 +186,7 @@ pub struct Payment {
 
 // Invoice creation payload (from React to Rust)
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct NewInvoiceLine {
     pub product_id: String,
     pub product_name_ar: String,
@@ -185,6 +199,7 @@ pub struct NewInvoiceLine {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct NewPayment {
     pub method: String,
     pub amount: f64,
@@ -192,6 +207,7 @@ pub struct NewPayment {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct NewInvoice {
     pub branch_id: String,
     pub branch_prefix: String,
@@ -209,6 +225,7 @@ pub struct NewInvoice {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct RefundLine {
     pub product_id: String,
     pub product_name_ar: String,
@@ -219,6 +236,7 @@ pub struct RefundLine {
 
 // Report types
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct DailySummary {
     pub date: String,
     pub invoice_count: i64,
@@ -230,6 +248,7 @@ pub struct DailySummary {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct PaymentMethodBreakdown {
     pub cash: f64,
     pub card: f64,
@@ -237,6 +256,7 @@ pub struct PaymentMethodBreakdown {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct TopProduct {
     pub name_ar: String,
     pub qty_sold: f64,
@@ -244,6 +264,7 @@ pub struct TopProduct {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct DailySales {
     pub sale_date: String,
     pub invoice_count: i64,
@@ -252,6 +273,7 @@ pub struct DailySales {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct InventoryReportRow {
     pub product_id: String,
     pub name_ar: String,
@@ -263,6 +285,7 @@ pub struct InventoryReportRow {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionReport {
     pub session: CashierSession,
     pub invoice_count: i64,
@@ -274,6 +297,7 @@ pub struct SessionReport {
 
 // ZATCA types
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ZatcaStatusInfo {
     pub registered: bool,
     pub csid_status: String,
@@ -284,6 +308,7 @@ pub struct ZatcaStatusInfo {
 
 // Settings
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub vat_rate: String,
     pub printer_port: String,
