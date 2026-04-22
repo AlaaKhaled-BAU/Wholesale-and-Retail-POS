@@ -7,6 +7,7 @@ import {
   FileText,
   BarChart3,
   Settings,
+  X,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -20,15 +21,40 @@ const navItems = [
   { path: '/settings', label: 'الإعدادات', icon: Settings },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const handleNavigate = (path: string) => {
+    navigate(path);
+    onClose();
+  };
+
   return (
-    <aside className="fixed right-0 top-0 h-full w-64 bg-white border-l border-gray-200 z-40 flex flex-col">
-      <div className="p-6 border-b border-gray-200">
-        <h1 className="text-xl font-bold text-primary-700">نظام نقاط البيع</h1>
-        <p className="text-sm text-gray-500 mt-1">Wholesale POS</p>
+    <aside
+      className={cn(
+        'fixed right-0 top-0 h-full w-64 bg-white border-l border-gray-200 z-40 flex flex-col',
+        'transition-transform duration-300 ease-in-out',
+        isOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0 lg:w-0 lg:overflow-hidden lg:border-none'
+      )}
+    >
+      <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-primary-700">نظام نقاط البيع</h1>
+          <p className="text-sm text-gray-500 mt-1">Wholesale POS</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+          title="إغلاق"
+        >
+          <X className="w-5 h-5 text-gray-600" />
+        </button>
       </div>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
@@ -39,7 +65,7 @@ export default function Sidebar() {
           return (
             <button
               key={item.label}
-              onClick={() => navigate(item.path)}
+              onClick={() => handleNavigate(item.path)}
               className={cn(
                 'w-full flex items-center gap-3 px-4 py-3 rounded-lg text-right transition-colors',
                 'hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500',
