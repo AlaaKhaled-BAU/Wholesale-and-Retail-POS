@@ -1,5 +1,6 @@
-use crate::lib::{Invoice, InvoiceLine, NewInvoice, Payment, RefundLine};
-use crate::AppState;
+use pos::{Invoice, InvoiceLine, NewInvoice, Payment, RefundLine};
+use pos::AppState;
+use rusqlite::OptionalExtension;
 use rusqlite::params;
 use tauri::State;
 use uuid::Uuid;
@@ -64,7 +65,7 @@ pub fn create_invoice(
     payload: NewInvoice,
     state: State<AppState>,
 ) -> Result<Invoice, String> {
-    let mut conn = state.db.lock().map_err(|e| e.to_string())?;
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
 
     // Step 1: Begin transaction
     conn.execute("BEGIN", [])
@@ -173,7 +174,7 @@ pub fn create_invoice(
                     &invoice_id,
                     &payment.method,
                     &payment.amount,
-                    &payment.reference.unwrap_or_default(),
+                    &payment.reference.clone().unwrap_or_default(),
                 ],
             )?;
         }
@@ -322,7 +323,7 @@ pub fn create_refund_invoice(
     lines: Vec<RefundLine>,
     state: State<AppState>,
 ) -> Result<Invoice, String> {
-    let mut conn = state.db.lock().map_err(|e| e.to_string())?;
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
 
     conn.execute("BEGIN", [])
         .map_err(|e| e.to_string())?;

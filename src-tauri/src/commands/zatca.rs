@@ -1,5 +1,6 @@
-use crate::lib::{Branch, Invoice, InvoiceLine, Payment, ZatcaStatusInfo};
-use crate::AppState;
+use pos::{Branch, Invoice, ZatcaStatusInfo};
+use pos::AppState;
+use rusqlite::OptionalExtension;
 use image::DynamicImage;
 use qrcode::QrCode;
 use quick_xml::events::{BytesEnd, BytesStart, Event};
@@ -95,53 +96,57 @@ pub async fn register_zatca_device(
     otp: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    // Scope 1: generate key, get branch, store key
+    let csr_base64 = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
 
-    // 1. Generate private key
-    let private_key = generate_private_key()?;
+        let private_key = generate_private_key()?;
 
-    // 2. Get branch info for CSR
-    let branch = conn
-        .query_row(
-            "SELECT id, name_ar, name_en, address, vat_number, cr_number, created_at FROM branches LIMIT 1",
-            [],
-            |row| {
-                Ok(Branch {
-                    id: row.get(0)?,
-                    name_ar: row.get(1)?,
-                    name_en: row.get(2)?,
-                    address: row.get(3)?,
-                    vat_number: row.get(4)?,
-                    cr_number: row.get(5)?,
-                    created_at: row.get(6)?,
-                })
-            },
+        let branch = conn
+            .query_row(
+                "SELECT id, name_ar, name_en, address, vat_number, cr_number, created_at FROM branches LIMIT 1",
+                [],
+                |row| {
+                    Ok(Branch {
+                        id: row.get(0)?,
+                        name_ar: row.get(1)?,
+                        name_en: row.get(2)?,
+                        address: row.get(3)?,
+                        vat_number: row.get(4)?,
+                        cr_number: row.get(5)?,
+                        created_at: row.get(6)?,
+                    })
+                },
+            )
+            .map_err(|_| "لا يوجد فرع".to_string())?;
+
+        let csr = generate_csr(&private_key, &branch)?;
+        let csr_b64 = base64::encode(&csr);
+
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+            params!["zatca_private_key", base64::encode(&private_key)],
         )
-        .map_err(|_| "لا يوجد فرع".to_string())?;
+        .map_err(|e| e.to_string())?;
 
-    // 3. Generate CSR
-    let csr = generate_csr(&private_key, &branch)?;
-    let csr_base64 = base64::encode(&csr);
+        csr_b64
+    }; // conn dropped here before await
 
-    // 4. Compliance check
+    // 4. Compliance check (async, no lock held)
     let request_id = check_zatca_compliance(&otp, &csr_base64).await?;
 
     // 5. Get CSID
     let (_csid, _secret) = get_csid(&otp, &request_id).await?;
 
-    // 6. Store in database (production: use Stronghold)
-    conn.execute(
-        "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
-        params!["zatca_private_key", base64::encode(&private_key)],
-    )
-    .map_err(|e| e.to_string())?;
-
-    // 7. Mark as registered
-    conn.execute(
-        "INSERT OR REPLACE INTO settings (key, value) VALUES ('zatca_registered', 'true')",
-        [],
-    )
-    .map_err(|e| e.to_string())?;
+    // 6. Mark as registered
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES ('zatca_registered', 'true')",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+    }
 
     Ok(())
 }
@@ -424,13 +429,14 @@ fn hash_invoice_xml(xml: &str) -> String {
 // Task 6.3.2 — ECDSA Signing
 // ============================================================
 fn sign_invoice_hash(hash: &[u8], private_key_pkcs8: &[u8]) -> Result<String, String> {
+    let rng = ring::rand::SystemRandom::new();
     let key_pair = ring::signature::EcdsaKeyPair::from_pkcs8(
         &ring::signature::ECDSA_P256_SHA256_FIXED_SIGNING,
         private_key_pkcs8,
+        &rng,
     )
     .map_err(|e| format!("فشل تحميل المفتاح: {:?}", e))?;
 
-    let rng = ring::rand::SystemRandom::new();
     let signature = key_pair
         .sign(&rng, hash)
         .map_err(|e| format!("فشل التوقيع: {:?}", e))?;
@@ -557,9 +563,9 @@ pub fn generate_and_store_invoice_qr(
              FROM invoice_lines WHERE invoice_id = ?1"
         )
         .map_err(|e| e.to_string())?;
-    let lines: Vec<crate::lib::InvoiceLine> = lines_stmt
+    let lines: Vec<pos::InvoiceLine> = lines_stmt
         .query_map([invoice_id], |row| {
-            Ok(crate::lib::InvoiceLine {
+            Ok(pos::InvoiceLine {
                 id: row.get(0)?,
                 invoice_id: row.get(1)?,
                 product_id: row.get(2)?,
@@ -640,42 +646,11 @@ pub fn generate_and_store_invoice_qr(
 // Task 6.4.1 — Submit to ZATCA (simplified for MVP)
 // ============================================================
 async fn submit_invoice_to_zatca_api(
-    invoice_id: &str,
-    conn: &rusqlite::Connection,
-) -> Result<(), String> {
-    // Get credentials
-    let csid: String = conn
-        .query_row(
-            "SELECT value FROM settings WHERE key = 'zatca_csid'",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|_| "لم يتم تسجيل الجهاز".to_string())?;
-
-    let secret: String = conn
-        .query_row(
-            "SELECT value FROM settings WHERE key = 'zatca_secret'",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|_| "لم يتم تسجيل الجهاز".to_string())?;
-
-    let hash: String = conn
-        .query_row(
-            "SELECT invoice_hash FROM invoices WHERE id = ?1",
-            [invoice_id],
-            |row| row.get(0),
-        )
-        .map_err(|_| "الفاتورة غير موجودة".to_string())?;
-
-    let uuid: String = conn
-        .query_row(
-            "SELECT uuid FROM invoices WHERE id = ?1",
-            [invoice_id],
-            |row| row.get(0),
-        )
-        .map_err(|_| "الفاتورة غير موجودة".to_string())?;
-
+    csid: &str,
+    secret: &str,
+    hash: &str,
+    uuid: &str,
+) -> Result<String, String> {
     let client = reqwest::Client::new();
     let response = client
         .post("https://gw-fatoora.zatca.gov.sa/e-invoicing/developer-portal/invoices/reporting/single")
@@ -693,31 +668,14 @@ async fn submit_invoice_to_zatca_api(
         .map_err(|e| e.to_string())?;
 
     match response.status().as_u16() {
-        200 => {
-            conn.execute(
-                "UPDATE invoices SET zatca_status = 'reported' WHERE id = ?1",
-                [invoice_id],
-            )
-            .map_err(|e| e.to_string())?;
-            conn.execute(
-                "DELETE FROM zatca_queue WHERE invoice_id = ?1",
-                [invoice_id],
-            )
-            .ok();
-            Ok(())
-        }
+        200 => Ok("reported".to_string()),
         400 => {
             let body = response.text().await.map_err(|e| e.to_string())?;
-            conn.execute(
-                "UPDATE invoices SET zatca_status = 'rejected', zatca_response = ?1 WHERE id = ?2",
-                params![&body, invoice_id],
-            )
-            .map_err(|e| e.to_string())?;
-            Err(format!("مرفوض: {}", body))
+            Err(format!("rejected:{}", body))
         }
         _ => {
             let body = response.text().await.map_err(|e| e.to_string())?;
-            Err(format!("خطأ في الخادم: {}", body))
+            Err(format!("error:{}", body))
         }
     }
 }
@@ -725,36 +683,96 @@ async fn submit_invoice_to_zatca_api(
 // ============================================================
 // Task 6.4.2 + 6.4.3 — Retry queue processing
 // ============================================================
-pub async fn process_zatca_retry_queue(conn: &rusqlite::Connection) {
-    let pending: Result<Vec<String>, _> = conn
-        .prepare("SELECT invoice_id FROM zatca_queue WHERE attempts < 10")
-        .and_then(|mut stmt| {
-            let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
-            rows.collect()
-        });
+pub async fn process_zatca_retry_queue(state: &AppState) {
+    // Collect pending invoice IDs (short lock scope)
+    let invoice_ids = {
+        let conn = match state.db.lock() {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let pending: Result<Vec<String>, _> = conn
+            .prepare("SELECT invoice_id FROM zatca_queue WHERE attempts < 10")
+            .and_then(|mut stmt| {
+                let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+                rows.collect()
+            });
+        pending.unwrap_or_default()
+    };
 
-    if let Ok(invoice_ids) = pending {
-        for invoice_id in invoice_ids {
-            let _ = submit_invoice_to_zatca_api(&invoice_id, conn).await;
-            let _ = conn.execute(
+    for invoice_id in invoice_ids {
+        // Read data needed for API (short lock scope)
+        let (csid, secret, hash, uuid) = {
+            let conn = match state.db.lock() {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+            let csid = conn
+                .query_row("SELECT value FROM settings WHERE key = 'zatca_csid'", [], |row| row.get::<_, String>(0));
+            let secret = conn
+                .query_row("SELECT value FROM settings WHERE key = 'zatca_secret'", [], |row| row.get::<_, String>(0));
+            let hash = conn
+                .query_row("SELECT invoice_hash FROM invoices WHERE id = ?1", [&invoice_id], |row| row.get::<_, String>(0));
+            let uuid = conn
+                .query_row("SELECT uuid FROM invoices WHERE id = ?1", [&invoice_id], |row| row.get::<_, String>(0));
+            match (csid, secret, hash, uuid) {
+                (Ok(c), Ok(s), Ok(h), Ok(u)) => (c, s, h, u),
+                _ => continue,
+            }
+        };
+
+        // Call API without holding lock
+        let result = submit_invoice_to_zatca_api(&csid, &secret, &hash, &uuid).await;
+
+        // Write results (short lock scope)
+        let _ = {
+            let conn = match state.db.lock() {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+            match &result {
+                Ok(status) if status == "reported" => {
+                    let _ = conn.execute(
+                        "UPDATE invoices SET zatca_status = 'reported' WHERE id = ?1",
+                        [&invoice_id],
+                    );
+                    let _ = conn.execute(
+                        "DELETE FROM zatca_queue WHERE invoice_id = ?1",
+                        [&invoice_id],
+                    );
+                }
+                Err(msg) if msg.starts_with("rejected:") => {
+                    let body = msg.strip_prefix("rejected:").unwrap_or("");
+                    let _ = conn.execute(
+                        "UPDATE invoices SET zatca_status = 'rejected', zatca_response = ?1 WHERE id = ?2",
+                        params![body, &invoice_id],
+                    );
+                }
+                _ => {}
+            }
+            conn.execute(
                 "UPDATE zatca_queue SET attempts = attempts + 1 WHERE invoice_id = ?1",
                 [&invoice_id],
-            );
-        }
+            )
+        };
     }
 
-    // Update urgent flag for invoices > 21.6 hours old
-    let _ = conn.execute(
-        "UPDATE zatca_queue SET urgent = 1 WHERE invoice_id IN ( \
-         SELECT i.id FROM zatca_queue q JOIN invoices i ON i.id = q.invoice_id \
-         WHERE JULIANDAY('now') - JULIANDAY(i.created_at) > 0.9 )",
-        [],
-    );
+    // Update urgent flag (short lock scope)
+    let _ = {
+        let conn = match state.db.lock() {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        conn.execute(
+            "UPDATE zatca_queue SET urgent = 1 WHERE invoice_id IN ( \
+             SELECT i.id FROM zatca_queue q JOIN invoices i ON i.id = q.invoice_id \
+             WHERE JULIANDAY('now') - JULIANDAY(i.created_at) > 0.9 )",
+            [],
+        )
+    };
 }
 
 #[tauri::command]
 pub async fn retry_zatca_queue(state: State<'_, AppState>) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    process_zatca_retry_queue(&conn).await;
+    process_zatca_retry_queue(&state).await;
     Ok(())
 }

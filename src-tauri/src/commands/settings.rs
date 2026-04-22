@@ -1,5 +1,6 @@
-use crate::lib::AppSettings;
-use crate::AppState;
+use pos::AppSettings;
+use pos::AppState;
+use rusqlite::OptionalExtension;
 use rusqlite::params;
 use tauri::State;
 

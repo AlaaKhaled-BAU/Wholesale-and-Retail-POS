@@ -1,5 +1,6 @@
-use crate::lib::{Category, NewProduct, Product};
-use crate::AppState;
+use pos::{Category, NewProduct, Product};
+use pos::AppState;
+use rusqlite::OptionalExtension;
 use rusqlite::params;
 use tauri::State;
 use uuid::Uuid;
@@ -267,7 +268,7 @@ pub fn create_category(
 
     conn.execute(
         "INSERT INTO categories (id, name_ar, name_en) VALUES (?1, ?2, ?3)",
-        params![&id, &name_ar, &name_en.unwrap_or_default()],
+        params![&id, &name_ar, &name_en.clone().unwrap_or_default()],
     )
     .map_err(|e| e.to_string())?;
 

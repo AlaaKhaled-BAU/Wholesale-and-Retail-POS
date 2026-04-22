@@ -1,8 +1,8 @@
-use crate::lib::{
+use pos::{
     CashierSession, DailySales, DailySummary, InventoryReportRow, PaymentMethodBreakdown,
     SessionReport, TopProduct,
 };
-use crate::AppState;
+use pos::AppState;
 use rusqlite::params;
 use tauri::State;
 

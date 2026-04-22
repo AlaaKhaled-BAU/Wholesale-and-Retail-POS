@@ -1,5 +1,5 @@
-use crate::lib::{Customer, Invoice, NewCustomer};
-use crate::AppState;
+use pos::{Customer, Invoice, NewCustomer};
+use pos::AppState;
 use rusqlite::params;
 use tauri::State;
 use uuid::Uuid;
@@ -87,9 +87,9 @@ pub fn create_customer(
         params![
             &id,
             &customer.name_ar,
-            &customer.phone.unwrap_or_default(),
-            &customer.vat_number.unwrap_or_default(),
-            &customer.cr_number.unwrap_or_default(),
+            &customer.phone.clone().unwrap_or_default(),
+            &customer.vat_number.clone().unwrap_or_default(),
+            &customer.cr_number.clone().unwrap_or_default(),
             &credit_limit,
             &customer.customer_type,
         ],

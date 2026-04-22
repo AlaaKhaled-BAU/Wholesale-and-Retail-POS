@@ -1,5 +1,6 @@
-use crate::lib::{CashierSession, SessionToken};
-use crate::AppState;
+use pos::{CashierSession, SessionToken};
+use pos::AppState;
+use rusqlite::OptionalExtension;
 use bcrypt::verify;
 use rusqlite::params;
 use tauri::State;

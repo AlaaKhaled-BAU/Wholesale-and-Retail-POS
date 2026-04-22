@@ -10,7 +10,7 @@
 | **Current Phase** | Phase 8 — MERGE COMPLETE (integration branch ready) |
 | **Last Updated** | April 22, 2026 |
 | **Active Dev** | Dev B + Dev A (merged) |
-| **Blocking Issue** | Frontend build test pending (requires `pnpm install` + `cargo check` on desktop) |
+| **Blocking Issue** | App compiles but login PINs fail; `pnpm tauri dev` hangs at build step 768/769 on slow machine |
 
 ---
 
@@ -232,7 +232,65 @@ Format:
 **Status**: Open / Fixed / Won't fix
 ```
 
-*(No bugs logged yet)*
+### BUG-1 — All Rust command files use `crate::lib` and `crate::AppState` which don't resolve
+**Found by**: Dev B
+**Phase**: Post-merge compilation
+**Severity**: 🔴 Critical
+**Reproduced**: Yes
+**Steps to reproduce**: Run `cargo check` after merging frontend files. 177 errors appear due to unresolved imports.
+**Root cause**: The backend crate is named `pos` in `Cargo.toml`, not `pos` as a library module. The command files were written assuming `crate::lib` and `crate::AppState` would resolve, but `lib.rs` defines the public API as the crate root. `main.rs` declares `mod commands` and `mod db`, so `crate::lib` doesn't exist.
+**Fix**: Replaced all `use crate::lib::{...}` with `use pos::{...}` and all `use crate::AppState` with `use pos::AppState`. Added `use rusqlite::OptionalExtension` where `.optional()` is used. Fixed `zatca.rs` to use `pos::InvoiceLine` instead of `crate::lib::InvoiceLine`.
+**Status**: Fixed
+
+### BUG-2 — `ring 0.17` API breaking change: `EcdsaKeyPair::from_pkcs8` requires 3 args
+**Found by**: Dev B
+**Phase**: Post-merge compilation
+**Severity**: 🔴 Critical
+**Reproduced**: Yes
+**Steps to reproduce**: `cargo check` fails in `zatca.rs` with `E0061: this function takes 3 arguments but 2 arguments were supplied`.
+**Root cause**: `ring` crate v0.17 changed `EcdsaKeyPair::from_pkcs8` to require a `&dyn SecureRandom` as the third argument.
+**Fix**: Created `SystemRandom::new()` before calling `from_pkcs8`, passed it as the third argument. Also used the same RNG for the `sign()` call.
+**Status**: Fixed
+
+### BUG-3 — Async Tauri commands hold `MutexGuard` across `.await` points
+**Found by**: Dev B
+**Phase**: Post-merge compilation
+**Severity**: 🔴 Critical
+**Reproduced**: Yes
+**Steps to reproduce**: `cargo check` fails with `future cannot be sent between threads safely` on `register_zatca_device` and `retry_zatca_queue`.
+**Root cause**: `MutexGuard<'_, Connection>` is not `Send`, but Tauri requires async command futures to be `Send`. Holding the DB lock across an `await` point violates this.
+**Fix**: Refactored `register_zatca_device` to release the lock before `.await` by using nested scopes. Completely rewrote `process_zatca_retry_queue` to take `&AppState` instead of `&Connection`, acquiring short lock scopes only for DB reads/writes and doing the HTTP API calls with no lock held. Updated `main.rs` background task to pass `&*state` instead of `&conn`.
+**Status**: Fixed
+
+### BUG-4 — Move semantics errors with `Option<String>` in `params![]` macros
+**Found by**: Dev B
+**Phase**: Post-merge compilation
+**Severity**: 🟡 Medium
+**Reproduced**: Yes
+**Steps to reproduce**: `cargo check` fails in `products.rs`, `customers.rs`, `invoices.rs` with `E0382: use of moved value` on `name_en.unwrap_or_default()` and similar patterns.
+**Root cause**: `params![]` macro takes references (`&`), but `.unwrap_or_default()` consumes the `Option<String>` by value. After the macro, the original variable is moved and can't be used in the return struct.
+**Fix**: Changed all `&field.unwrap_or_default()` to `&field.clone().unwrap_or_default()` in affected `params![]` calls.
+**Status**: Fixed
+
+### BUG-5 — Missing Tauri bundle icons cause proc macro panic
+**Found by**: Dev B
+**Phase**: Post-merge compilation
+**Severity**: 🔴 Critical
+**Reproduced**: Yes
+**Steps to reproduce**: `cargo run` fails with `proc macro panicked: failed to open icon .../icons/32x32.png: No such file or directory`.
+**Root cause**: `tauri.conf.json` references 5 icon files in `src-tauri/icons/`, but the directory was empty after the merge.
+**Fix**: Created `src-tauri/icons/` directory and generated valid RGBA PNG placeholder icons (32x32, 128x128, 128x128@2x) using Python PIL.
+**Status**: Fixed
+
+### BUG-6 — Login PINs (0000 / 1234) rejected at runtime
+**Found by**: User / Dev B
+**Phase**: Runtime integration test
+**Severity**: 🔴 Critical
+**Reproduced**: Yes
+**Steps to reproduce**: Launch app with `pnpm tauri dev`. Enter `0000` or `1234` on login screen. Both return "رقم التعريف غير صحيح" (incorrect PIN).
+**Root cause**: Unknown. `seed_if_empty` creates hashes with `bcrypt::hash("0000", DEFAULT_COST)`. `login_user` verifies with `bcrypt::verify(&pin, &pin_hash)`. Database was deleted and rebuilt. Possibilities: (1) DB not re-seeding, (2) bcrypt version mismatch, (3) frontend sending wrong payload, (4) `is_active = 1` filter excluding rows, (5) PIN input being treated as number instead of string.
+**Fix**: Not yet found. Requires runtime debugging of `login_user` command and DB inspection.
+**Status**: Open
 
 ---
 
@@ -253,6 +311,18 @@ Format:
 **Blocking**: Dev B
 **Since**: April 22, 2026
 **Resolution needed**: Install system packages: `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev` (or equivalent for the target OS). Alternatively, run `cargo check` on a machine with a desktop environment (Windows, macOS, or Linux with GTK dev libs installed).
+**Resolved**: April 22, 2026 — Installed `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev` (105 packages, 98MB). `cargo check` now passes.
+
+### BLOCKER-2 — Rust compilation extremely slow; `pnpm tauri dev` hangs at step 768/769
+**Blocking**: Both
+**Since**: April 22, 2026
+**Resolution needed**: First debug build on this machine takes 5+ minutes and often times out. `cargo run` from `src-tauri/` works but frontend dev server doesn't start (wrong working directory). `pnpm tauri dev` from project root starts Vite correctly but the `cargo run --no-default-features` step hangs at `Building [=======================> ] 768/769: pos(bin)` for an extended period, causing the launcher to appear stuck. May need release profile tuning, sccache, or a faster build machine.
+**Resolved**: Not yet
+
+### BLOCKER-3 — Login PINs (0000 / 1234) rejected even after database reset
+**Blocking**: Both
+**Since**: April 22, 2026
+**Resolution needed**: Database file was deleted (`~/.local/share/com.wholesale.pos.app/pos.db`) to force re-seeding on next launch. App recompiled successfully (0 errors, 10 warnings). However, user reports both PINs still fail at login screen. Need to verify: (1) database was actually recreated with correct seed data, (2) `bcrypt::verify` works with the stored hash, (3) frontend is sending the PIN correctly to the `login_user` command, (4) `is_active = 1` filter in `login_user` query isn't excluding seeded users. Also need to check if the `seed_if_empty` function actually runs before the login attempt.
 **Resolved**: Not yet
 
 ---

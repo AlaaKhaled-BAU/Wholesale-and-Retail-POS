@@ -61,9 +61,7 @@ fn main() {
                 loop {
                     interval.tick().await;
                     if let Some(state) = handle.try_state::<pos::AppState>() {
-                        if let Ok(conn) = state.db.lock() {
-                            let _ = commands::zatca::process_zatca_retry_queue(&conn).await;
-                        }
+                        commands::zatca::process_zatca_retry_queue(&*state).await;
                     }
                 }
             });

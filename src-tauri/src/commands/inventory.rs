@@ -1,5 +1,6 @@
-use crate::lib::InventoryItem;
-use crate::AppState;
+use pos::InventoryItem;
+use pos::AppState;
+use rusqlite::OptionalExtension;
 use rusqlite::params;
 use tauri::State;
 use uuid::Uuid;
