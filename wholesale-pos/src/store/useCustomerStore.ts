@@ -41,7 +41,7 @@ const MOCK_CUSTOMERS: Customer[] = [
   },
 ];
 
-export const useCustomerStore = create<CustomerState>((set, get) => ({
+export const useCustomerStore = create<CustomerState>((set) => ({
   customers: MOCK_CUSTOMERS,
   selectedCustomer: null,
   isLoading: false,

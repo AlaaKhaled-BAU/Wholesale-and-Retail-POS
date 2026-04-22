@@ -24,7 +24,7 @@ export default function POSPage() {
 
   const { items, customerId, customerName, subtotal, totalVat, grandTotal, invoiceDiscount, addItem, updateQty, removeItem, setCustomer, setInvoiceDiscount, clearCart } = useCartStore();
   const { products, fetchProducts } = useProductStore();
-  const { customers, selectedCustomer, selectCustomer } = useCustomerStore();
+  const { customers } = useCustomerStore();
   const { suspendedCarts, suspendCart, restoreCart, deleteSuspended, createInvoice } = useInvoiceStore();
 
   // Focus barcode input on mount
@@ -492,7 +492,7 @@ export default function POSPage() {
                   }}
                   className={cn(
                     'w-full text-right p-3 rounded-lg hover:bg-gray-50 mb-2 border',
-                    selectedCustomer?.id === customer.id ? 'border-primary-500 bg-primary-50' : 'border-gray-200'
+                    customerId === customer.id ? 'border-primary-500 bg-primary-50' : 'border-gray-200'
                   )}
                 >
                   <div className="font-medium">{customer.nameAr}</div>

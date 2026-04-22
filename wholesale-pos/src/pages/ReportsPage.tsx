@@ -161,7 +161,7 @@ export default function ReportsPage() {
                     paddingAngle={5}
                     dataKey="value"
                   >
-                    {mockDailyData.paymentBreakdown.map((entry, index) => (
+                    {mockDailyData.paymentBreakdown.map((_entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>

@@ -5,7 +5,7 @@ import { cn } from '../lib/utils';
 import type { Customer, CustomerInput } from '../types';
 
 export default function CustomersPage() {
-  const { customers, selectedCustomer, isLoading, addCustomer, addPayment, selectCustomer } = useCustomerStore();
+  const { customers, selectedCustomer, addCustomer, addPayment, selectCustomer } = useCustomerStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showDetail, setShowDetail] = useState(false);

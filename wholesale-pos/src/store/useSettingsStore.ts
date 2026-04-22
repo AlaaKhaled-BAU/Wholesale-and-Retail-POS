@@ -44,7 +44,7 @@ interface SettingsState extends AppSettings {
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       ...DEFAULT_SETTINGS,
       isLoading: false,
       error: null,

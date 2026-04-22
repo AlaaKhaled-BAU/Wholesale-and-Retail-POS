@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { Search, Plus, Pencil, Power, Folder, Package } from 'lucide-react';
+import { Search, Plus, Pencil, Folder, Package } from 'lucide-react';
 import { useProductStore } from '../store/useProductStore';
 import { cn } from '../lib/utils';
 import type { Product, ProductInput } from '../types';
 
 export default function InventoryPage() {
-  const { products, categories, searchQuery, selectedCategory, isLoading, fetchProducts, addProduct, updateProduct, toggleActive, setSearchQuery, setSelectedCategory } = useProductStore();
+  const { products, categories, searchQuery, selectedCategory, addProduct, updateProduct, toggleActive, setSearchQuery, setSelectedCategory } = useProductStore();
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [, setShowCategoryManager] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
 
