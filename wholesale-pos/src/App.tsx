@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/useAuthStore';
+import { useIdleTimer } from './hooks/useIdleTimer';
+import { useToast } from './hooks/useToast';
 import LoginPage from './pages/LoginPage';
 import POSPage from './pages/POSPage';
 import InventoryPage from './pages/InventoryPage';
@@ -8,12 +10,27 @@ import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import AppShell from './components/layout/AppShell';
 import RouteGuard from './components/layout/RouteGuard';
+import ToastContainer from './components/common/ToastContainer';
 
 function App() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, lockScreen } = useAuthStore();
+  const toast = useToast();
+
+  // Auto-lock after 5 minutes of inactivity
+  useIdleTimer({
+    timeout: 300_000, // 5 minutes
+    onIdle: () => {
+      if (isAuthenticated) {
+        lockScreen();
+        toast.info('تم قفل الجلسة لعدم النشاط');
+      }
+    },
+    enabled: isAuthenticated,
+  });
 
   return (
     <BrowserRouter>
+      <ToastContainer />
       <Routes>
         <Route
           path="/login"

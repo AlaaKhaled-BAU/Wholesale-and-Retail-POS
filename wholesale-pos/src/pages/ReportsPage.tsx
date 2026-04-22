@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Download, Calendar, CalendarRange, CalendarDays } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, LineChart, Line, ResponsiveContainer } from 'recharts';
+import { exportToCSV } from '../lib/csvExport';
+import { useToast } from '../hooks/useToast';
 import { cn } from '../lib/utils';
 
 const COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444'];
@@ -78,9 +80,15 @@ export default function ReportsPage() {
     { id: 'shift' as const, label: 'تقرير المناوبة', icon: Calendar },
   ];
 
-  const exportToCSV = (data: unknown[], filename: string) => {
-    // TODO: Implement CSV export
-    console.log('Exporting to CSV:', filename, data);
+  const toast = useToast();
+
+  const handleExportCSV = (data: Record<string, unknown>[], filename: string) => {
+    if (data.length === 0) {
+      toast.warning('لا توجد بيانات للتصدير');
+      return;
+    }
+    exportToCSV(data, filename);
+    toast.success('تم تصدير التقرير بنجاح');
   };
 
   return (
@@ -123,7 +131,7 @@ export default function ReportsPage() {
               className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
             <button
-              onClick={() => exportToCSV([], 'daily-report.csv')}
+              onClick={() => handleExportCSV(mockDailyData.topProducts.map((p) => ({ name: p.name, qty: p.qty, revenue: p.revenue })), 'daily-report.csv')}
               className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50"
             >
               <Download className="w-4 h-4" />
@@ -199,7 +207,7 @@ export default function ReportsPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <button
-              onClick={() => exportToCSV([], 'inventory-report.csv')}
+              onClick={() => handleExportCSV(mockInventoryData.lowStockItems.map((i) => ({ name: i.name, barcode: i.barcode, currentStock: i.currentStock, minStock: i.minStock, category: i.category })), 'inventory-report.csv')}
               className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50"
             >
               <Download className="w-4 h-4" />
@@ -270,7 +278,7 @@ export default function ReportsPage() {
               className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
             <button
-              onClick={() => exportToCSV([], 'period-report.csv')}
+              onClick={() => handleExportCSV(mockPeriodData.dailySales.map((d) => ({ date: d.date, sales: d.sales, invoices: d.invoices })), 'period-report.csv')}
               className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50"
             >
               <Download className="w-4 h-4" />
@@ -313,7 +321,7 @@ export default function ReportsPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <button
-              onClick={() => exportToCSV([], 'shift-report.csv')}
+              onClick={() => handleExportCSV([{ sessionId: mockShiftData.sessionId, cashierName: mockShiftData.cashierName, totalSales: mockShiftData.totalSales, totalInvoices: mockShiftData.totalInvoices, expectedCash: mockShiftData.expectedCash, actualCash: mockShiftData.actualCash, discrepancy: mockShiftData.discrepancy }], 'shift-report.csv')}
               className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50"
             >
               <Download className="w-4 h-4" />

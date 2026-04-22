@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Store, Printer, Users, Percent, Barcode, Shield, Save, TestTube } from 'lucide-react';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { useToast } from '../hooks/useToast';
 import { cn } from '../lib/utils';
 
 export default function SettingsPage() {
+  const toast = useToast();
   const {
     storeInfo,
     printer,
@@ -302,7 +304,7 @@ export default function SettingsPage() {
 
           {/* Save Button */}
           <div className="pt-6 border-t border-gray-200">
-            <button className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-bold">
+            <button onClick={() => toast.success('تم حفظ الإعدادات بنجاح')} className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-bold">
               <Save className="w-4 h-4" />
               حفظ الإعدادات
             </button>

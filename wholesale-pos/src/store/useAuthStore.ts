@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User, Session } from '../types';
+import { useToastStore } from '../hooks/useToast';
 
 interface AuthState {
   user: User | null;
@@ -8,6 +9,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLocked: boolean;
   failedAttempts: number;
+  isLoading: boolean;
   login: (pin: string) => Promise<boolean>;
   logout: () => void;
   lockScreen: () => void;
@@ -40,40 +42,52 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLocked: false,
       failedAttempts: 0,
+      isLoading: false,
 
       login: async (pin: string) => {
-        // TODO: Replace with actual Tauri invoke('login_user', { pin })
-        const user = MOCK_USERS[pin];
-        
-        if (user) {
-          const session: Session = {
-            token: `mock-token-${Date.now()}`,
-            expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(), // 8 hours
-            user,
-          };
+        set({ isLoading: true });
+        try {
+          // TODO: Replace with actual Tauri invoke('login_user', { pin })
+          const user = MOCK_USERS[pin];
           
-          set({
-            user,
-            session,
-            isAuthenticated: true,
-            isLocked: false,
-            failedAttempts: 0,
-          });
-          return true;
-        }
+          if (user) {
+            const session: Session = {
+              token: `mock-token-${Date.now()}`,
+              expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
+              user,
+            };
+            
+            set({
+              user,
+              session,
+              isAuthenticated: true,
+              isLocked: false,
+              failedAttempts: 0,
+              isLoading: false,
+            });
+            useToastStore.getState().addToast('تم تسجيل الدخول بنجاح', 'success');
+            return true;
+          }
 
-        const newFailedAttempts = get().failedAttempts + 1;
-        set({ failedAttempts: newFailedAttempts });
-        
-        if (newFailedAttempts >= 5) {
-          set({ isLocked: true });
-          // Auto-unlock after 30 seconds
-          setTimeout(() => {
-            set({ isLocked: false, failedAttempts: 0 });
-          }, 30000);
+          const newFailedAttempts = get().failedAttempts + 1;
+          set({ failedAttempts: newFailedAttempts, isLoading: false });
+          
+          if (newFailedAttempts >= 5) {
+            set({ isLocked: true });
+            useToastStore.getState().addToast('تم قفل الحساب لمدة 30 ثانية', 'error');
+            setTimeout(() => {
+              set({ isLocked: false, failedAttempts: 0 });
+            }, 30000);
+          } else {
+            useToastStore.getState().addToast('الرمز السري غير صحيح', 'error');
+          }
+          
+          return false;
+        } catch (error) {
+          set({ isLoading: false });
+          useToastStore.getState().addToast('حدث خطأ أثناء تسجيل الدخول', 'error');
+          return false;
         }
-        
-        return false;
       },
 
       logout: () => {
@@ -84,6 +98,7 @@ export const useAuthStore = create<AuthState>()(
           isLocked: false,
           failedAttempts: 0,
         });
+        useToastStore.getState().addToast('تم تسجيل الخروج', 'info');
       },
 
       lockScreen: () => {

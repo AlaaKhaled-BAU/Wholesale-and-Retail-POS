@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Search, Plus, Pencil, Eye, DollarSign, Users } from 'lucide-react';
+import { Search, Plus, Pencil, Eye, DollarSign, Users, Loader2 } from 'lucide-react';
 import { useCustomerStore } from '../store/useCustomerStore';
+import { useToast } from '../hooks/useToast';
 import { cn } from '../lib/utils';
 import type { Customer, CustomerInput } from '../types';
 
 export default function CustomersPage() {
+  const toast = useToast();
   const { customers, selectedCustomer, addCustomer, addPayment, selectCustomer } = useCustomerStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -12,6 +14,8 @@ export default function CustomersPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
 
   const [formData, setFormData] = useState<CustomerInput>({
     nameAr: '',
@@ -57,20 +61,36 @@ export default function CustomersPage() {
   };
 
   const handleSubmit = async () => {
-    if (editingCustomer) {
-      // TODO: Update customer
-    } else {
-      await addCustomer(formData);
+    setIsSaving(true);
+    try {
+      if (editingCustomer) {
+        // TODO: Update customer
+        toast.success('تم تحديث العميل بنجاح');
+      } else {
+        await addCustomer(formData);
+        toast.success('تم إضافة العميل بنجاح');
+      }
+      setShowModal(false);
+      setEditingCustomer(null);
+    } catch (error) {
+      toast.error('حدث خطأ أثناء حفظ العميل');
+    } finally {
+      setIsSaving(false);
     }
-    setShowModal(false);
-    setEditingCustomer(null);
   };
 
   const handlePayment = async () => {
-    if (selectedCustomer && paymentAmount) {
+    if (!selectedCustomer || !paymentAmount) return;
+    setIsPaying(true);
+    try {
       await addPayment(selectedCustomer.id, parseFloat(paymentAmount));
       setPaymentAmount('');
       setShowPaymentModal(false);
+      toast.success('تم تسجيل الدفعة بنجاح');
+    } catch (error) {
+      toast.error('حدث خطأ أثناء تسجيل الدفعة');
+    } finally {
+      setIsPaying(false);
     }
   };
 
@@ -272,10 +292,10 @@ export default function CustomersPage() {
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={!formData.nameAr}
-                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-bold disabled:opacity-50"
+                disabled={!formData.nameAr || isSaving}
+                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-bold disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                حفظ
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'حفظ'}
               </button>
             </div>
           </div>
@@ -402,10 +422,10 @@ export default function CustomersPage() {
               </button>
               <button
                 onClick={handlePayment}
-                disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
-                className="flex-1 px-4 py-2 bg-success-600 text-white rounded-lg hover:bg-success-700 font-bold disabled:opacity-50"
+                disabled={!paymentAmount || parseFloat(paymentAmount) <= 0 || isPaying}
+                className="flex-1 px-4 py-2 bg-success-600 text-white rounded-lg hover:bg-success-700 font-bold disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                تأكيد
+                {isPaying ? <Loader2 className="w-4 h-4 animate-spin" /> : 'تأكيد'}
               </button>
             </div>
           </div>

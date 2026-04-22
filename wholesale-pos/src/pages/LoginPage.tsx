@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
-import { Lock, Unlock } from 'lucide-react';
+import { Lock, Unlock, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login, isLocked, failedAttempts, resetFailedAttempts } = useAuthStore();
+  const { login, isLocked, failedAttempts, resetFailedAttempts, isLoading } = useAuthStore();
   const [pin, setPin] = useState('');
   const [shake, setShake] = useState(false);
   const [lockoutTimer, setLockoutTimer] = useState(30);
@@ -27,7 +27,7 @@ export default function LoginPage() {
   }, [isLocked, resetFailedAttempts]);
 
   const handleDigit = (digit: string) => {
-    if (isLocked || pin.length >= 4) return;
+    if (isLocked || isLoading || pin.length >= 4) return;
     const newPin = pin + digit;
     setPin(newPin);
 
@@ -48,11 +48,11 @@ export default function LoginPage() {
   };
 
   const handleClear = () => {
-    setPin('');
+    if (!isLoading) setPin('');
   };
 
   const handleBackspace = () => {
-    setPin((prev) => prev.slice(0, -1));
+    if (!isLoading) setPin((prev) => prev.slice(0, -1));
   };
 
   const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'];
@@ -100,41 +100,47 @@ export default function LoginPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-3 gap-3">
-              {digits.map((digit) => {
-                if (digit === 'C') {
+            {isLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3">
+                {digits.map((digit) => {
+                  if (digit === 'C') {
+                    return (
+                      <button
+                        key={digit}
+                        onClick={handleClear}
+                        className="h-14 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold text-gray-700 transition-colors"
+                      >
+                        مسح
+                      </button>
+                    );
+                  }
+                  if (digit === '⌫') {
+                    return (
+                      <button
+                        key={digit}
+                        onClick={handleBackspace}
+                        className="h-14 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold text-gray-700 transition-colors"
+                      >
+                        حذف
+                      </button>
+                    );
+                  }
                   return (
                     <button
                       key={digit}
-                      onClick={handleClear}
-                      className="h-14 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold text-gray-700 transition-colors"
+                      onClick={() => handleDigit(digit)}
+                      className="h-14 rounded-xl bg-white border-2 border-gray-200 hover:border-primary-400 hover:bg-primary-50 text-xl font-semibold text-gray-900 transition-colors"
                     >
-                      مسح
+                      {digit}
                     </button>
                   );
-                }
-                if (digit === '⌫') {
-                  return (
-                    <button
-                      key={digit}
-                      onClick={handleBackspace}
-                      className="h-14 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold text-gray-700 transition-colors"
-                    >
-                      حذف
-                    </button>
-                  );
-                }
-                return (
-                  <button
-                    key={digit}
-                    onClick={() => handleDigit(digit)}
-                    className="h-14 rounded-xl bg-white border-2 border-gray-200 hover:border-primary-400 hover:bg-primary-50 text-xl font-semibold text-gray-900 transition-colors"
-                  >
-                    {digit}
-                  </button>
-                );
-              })}
-            </div>
+                })}
+              </div>
+            )}
           </>
         )}
 

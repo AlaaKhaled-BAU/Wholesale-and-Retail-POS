@@ -1,15 +1,18 @@
 import { useState } from 'react';
-import { Search, Plus, Pencil, Folder, Package } from 'lucide-react';
+import { Search, Plus, Pencil, Folder, Package, Loader2 } from 'lucide-react';
 import { useProductStore } from '../store/useProductStore';
+import { useToast } from '../hooks/useToast';
 import { cn } from '../lib/utils';
 import type { Product, ProductInput } from '../types';
 
 export default function InventoryPage() {
+  const toast = useToast();
   const { products, categories, searchQuery, selectedCategory, addProduct, updateProduct, toggleActive, setSearchQuery, setSelectedCategory } = useProductStore();
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [, setShowCategoryManager] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isSaving, setIsSaving] = useState(false);
   const itemsPerPage = 50;
 
   const [formData, setFormData] = useState<ProductInput>({
@@ -77,13 +80,22 @@ export default function InventoryPage() {
   };
 
   const handleSubmit = async () => {
-    if (editingProduct) {
-      await updateProduct(editingProduct.id, formData);
-    } else {
-      await addProduct(formData);
+    setIsSaving(true);
+    try {
+      if (editingProduct) {
+        await updateProduct(editingProduct.id, formData);
+        toast.success('تم تحديث المنتج بنجاح');
+      } else {
+        await addProduct(formData);
+        toast.success('تم إضافة المنتج بنجاح');
+      }
+      setShowModal(false);
+      setEditingProduct(null);
+    } catch (error) {
+      toast.error('حدث خطأ أثناء حفظ المنتج');
+    } finally {
+      setIsSaving(false);
     }
-    setShowModal(false);
-    setEditingProduct(null);
   };
 
   return (
@@ -326,10 +338,10 @@ export default function InventoryPage() {
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={!formData.barcode || !formData.nameAr || formData.sellPrice <= 0}
-                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-bold disabled:opacity-50"
+                disabled={!formData.barcode || !formData.nameAr || formData.sellPrice <= 0 || isSaving}
+                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-bold disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                حفظ
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'حفظ'}
               </button>
             </div>
           </div>
