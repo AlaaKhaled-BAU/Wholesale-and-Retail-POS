@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Invoice, SuspendedCart } from '../types';
+import { createInvoice as createInvoiceCmd } from '../lib/tauri-commands';
 
 interface InvoiceState {
   invoices: Invoice[];
@@ -77,34 +78,7 @@ export const useInvoiceStore = create<InvoiceState>()(
       createInvoice: async (cartData) => {
         set({ isLoading: true, error: null });
         try {
-          // TODO: Replace with actual Tauri invoke('create_invoice', { cartData })
-          const invoice: Invoice = {
-            id: `inv-${Date.now()}`,
-            uuid: `uuid-${Date.now()}`,
-            invoiceNumber: `INV-${String(get().invoices.length + 1).padStart(5, '0')}`,
-            branchId: '1',
-            cashierId: '1',
-            customerId: cartData.customerId,
-            type: cartData.customerId ? 'standard' : 'simplified',
-            status: 'draft',
-            subtotal: cartData.subtotal,
-            discount: cartData.invoiceDiscount,
-            vatTotal: cartData.totalVat,
-            total: cartData.grandTotal,
-            paymentMethod: cartData.paymentMethod,
-            lines: cartData.items.map((item, index) => ({
-              id: `line-${index}`,
-              productId: item.productId,
-              productName: item.name,
-              qty: item.qty,
-              unitPrice: item.unitPrice,
-              discount: item.discountPercent,
-              vatAmount: item.lineTotal * (item.vatRate / 100),
-              lineTotal: item.lineTotal,
-            })),
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
+          const invoice = await createInvoiceCmd(cartData);
 
           set((state) => ({
             invoices: [...state.invoices, invoice],
