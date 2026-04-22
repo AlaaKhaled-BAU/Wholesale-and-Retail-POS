@@ -4,6 +4,7 @@ import { useCartStore } from '../store/useCartStore';
 import { useProductStore } from '../store/useProductStore';
 import { useCustomerStore } from '../store/useCustomerStore';
 import { useInvoiceStore } from '../store/useInvoiceStore';
+import { useSettingsStore } from '../store/useSettingsStore';
 import { useToast } from '../hooks/useToast';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { cn } from '../lib/utils';
@@ -34,12 +35,14 @@ export default function POSPage() {
   } | null>(null);
   const [isSearchingInvoice, setIsSearchingInvoice] = useState(false);
   const [showRefundConfirm, setShowRefundConfirm] = useState(false);
+  const [showReceiptPreview, setShowReceiptPreview] = useState(false);
   
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const scanBufferRef = useRef('');
   const scanTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  const { storeInfo } = useSettingsStore();
   const { items, customerId, customerName, subtotal, totalVat, grandTotal, invoiceDiscount, addItem, updateQty, removeItem, setCustomer, setInvoiceDiscount, clearCart } = useCartStore();
 
   useKeyboardShortcuts(useMemo(() => [
@@ -402,6 +405,24 @@ export default function POSPage() {
               <UserPlus className="w-4 h-4 text-gray-400" />
               <span className="text-gray-600">{customerName || 'عميل نقدي'}{customerId && <span className="mr-2 px-2 py-0.5 bg-primary-100 text-primary-700 rounded-full text-xs">B2B</span>}</span>
             </div>
+            {customerId && (
+              <div className="mt-2 text-xs">
+                {(() => {
+                  const customer = customers.find((c) => c.id === customerId);
+                  if (!customer) return null;
+                  const remaining = customer.creditLimit - customer.balance;
+                  return (
+                    <div className={cn(
+                      'flex items-center justify-between px-2 py-1 rounded-lg',
+                      customer.balance > customer.creditLimit * 0.8 ? 'bg-rose-50 text-rose-700' : 'bg-gray-50 text-gray-600'
+                    )}>
+                      <span>الرصيد المتبقي:</span>
+                      <span className="font-bold">{remaining.toFixed(2)} ر.س</span>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
@@ -496,11 +517,56 @@ export default function POSPage() {
                 </div>
               )}
             </div>
-            <div className="p-6 border-t border-gray-200 flex gap-3">
-              <button onClick={() => setShowPaymentModal(false)} className="flex-1 px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">إلغاء</button>
-              <button onClick={handlePayment} disabled={!isPaymentValid() || isProcessingPayment} className="flex-1 px-4 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-bold disabled:opacity-50 disabled:cursor-not-allowed">
-                {isProcessingPayment ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'تأكيد البيع'}
+            <div className="p-6 border-t border-gray-200 space-y-2">
+              <button
+                onClick={() => setShowReceiptPreview(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm text-gray-600"
+              >
+                <Receipt className="w-4 h-4" />
+                معاينة الإيصال
               </button>
+              <div className="flex gap-3">
+                <button onClick={() => setShowPaymentModal(false)} className="flex-1 px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">إلغاء</button>
+                <button onClick={handlePayment} disabled={!isPaymentValid() || isProcessingPayment} className="flex-1 px-4 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-bold disabled:opacity-50 disabled:cursor-not-allowed">
+                  {isProcessingPayment ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'تأكيد البيع'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Receipt Preview Modal */}
+      {showReceiptPreview && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 overflow-hidden">
+            <div className="p-6 border-b border-gray-200 text-center">
+              <h2 className="text-lg font-bold">{storeInfo.nameAr}</h2>
+              <p className="text-xs text-gray-500 mt-1">{storeInfo.address}</p>
+              <p className="text-xs text-gray-500">الرقم الضريبي: {storeInfo.vatNumber}</p>
+            </div>
+            <div className="p-6 space-y-3">
+              <div className="text-center text-xs text-gray-400 border-b border-dashed border-gray-200 pb-2">
+                {new Date().toLocaleString('ar-SA')}
+              </div>
+              <div className="space-y-2">
+                {items.map((item) => (
+                  <div key={item.productId} className="flex justify-between text-sm">
+                    <span>{item.name} × {item.qty}</span>
+                    <span className="font-medium">{item.lineTotal.toFixed(2)} ر.س</span>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-dashed border-gray-200 pt-3 space-y-1 text-sm">
+                <div className="flex justify-between"><span className="text-gray-500">المجموع</span><span>{subtotal.toFixed(2)} ر.س</span></div>
+                {invoiceDiscount > 0 && <div className="flex justify-between text-success-600"><span>الخصم</span><span>-{invoiceDiscount.toFixed(2)} ر.س</span></div>}
+                <div className="flex justify-between"><span className="text-gray-500">الضريبة (15%)</span><span>{totalVat.toFixed(2)} ر.س</span></div>
+                <div className="flex justify-between text-lg font-bold pt-1"><span>الإجمالي</span><span>{grandTotal.toFixed(2)} ر.س</span></div>
+              </div>
+              <div className="text-center text-[10px] text-gray-400 pt-2">شكراً لزيارتكم</div>
+            </div>
+            <div className="p-4 border-t border-gray-200">
+              <button onClick={() => setShowReceiptPreview(false)} className="w-full px-4 py-2.5 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm font-medium transition-colors">إغلاق المعاينة</button>
             </div>
           </div>
         </div>

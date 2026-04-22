@@ -17,6 +17,7 @@ export default function InvoicesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedInvoice, setSelectedInvoice] = useState<typeof invoices[0] | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
 
@@ -26,7 +27,7 @@ export default function InvoicesPage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, dateFrom, dateTo]);
+  }, [searchQuery, dateFrom, dateTo, statusFilter]);
 
   const filteredInvoices = invoices.filter((inv) => {
     const matchesSearch =
@@ -38,7 +39,9 @@ export default function InvoicesPage() {
     if (dateFrom && invDate < dateFrom) matchesDate = false;
     if (dateTo && invDate > dateTo) matchesDate = false;
 
-    return matchesSearch && matchesDate;
+    const matchesStatus = statusFilter === 'all' || inv.status === statusFilter;
+
+    return matchesSearch && matchesDate && matchesStatus;
   });
 
   const totalPages = Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE) || 1;
@@ -119,6 +122,35 @@ export default function InvoicesPage() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Status Filter Tabs */}
+      <div className="flex gap-1 bg-white rounded-xl shadow-sm p-2 overflow-x-auto">
+        {[
+          { key: 'all', label: 'الكل', count: invoices.length },
+          { key: 'cleared', label: 'مُبلَّغ', count: invoices.filter((i) => i.status === 'cleared').length },
+          { key: 'pending', label: 'معلق', count: invoices.filter((i) => i.status === 'pending').length },
+          { key: 'rejected', label: 'مرفوض', count: invoices.filter((i) => i.status === 'rejected').length },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setStatusFilter(tab.key)}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap',
+              statusFilter === tab.key
+                ? 'bg-primary-50 text-primary-700 ring-1 ring-primary-200'
+                : 'text-gray-600 hover:bg-gray-50'
+            )}
+          >
+            {tab.label}
+            <span className={cn(
+              'px-1.5 py-0.5 rounded text-[10px] font-bold',
+              statusFilter === tab.key ? 'bg-primary-200 text-primary-700' : 'bg-gray-100 text-gray-500'
+            )}>
+              {tab.count}
+            </span>
+          </button>
+        ))}
       </div>
 
       {/* Invoices Table */}
