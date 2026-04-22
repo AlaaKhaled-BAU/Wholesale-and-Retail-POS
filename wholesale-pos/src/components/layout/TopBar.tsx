@@ -1,4 +1,4 @@
-import { Settings, LogOut, Store, ScanBarcode, PanelRightOpen, PanelRightClose } from 'lucide-react';
+import { Settings, LogOut, Store, ScanBarcode, PanelRightOpen, PanelRightClose, Moon, Sun } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
@@ -13,7 +13,7 @@ interface TopBarProps {
 export default function TopBar({ isSidebarOpen = true, onMenuClick }: TopBarProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const { storeInfo } = useSettingsStore();
+  const { storeInfo, darkMode, toggleDarkMode } = useSettingsStore();
   const { status: scannerStatus } = useScannerStatus();
 
   const handleLogout = () => {
@@ -99,6 +99,15 @@ export default function TopBar({ isSidebarOpen = true, onMenuClick }: TopBarProp
           />
         </div>
 
+        {/* Dark Mode Toggle */}
+        <button
+          onClick={toggleDarkMode}
+          className="p-2 rounded-xl text-gray-400 hover:text-amber-500 hover:bg-amber-50 active:scale-95 transition-all duration-200"
+          title={darkMode ? 'الوضع الفاتح' : 'الوضع الداكن'}
+        >
+          {darkMode ? <Sun className="w-[18px] h-[18px]" /> : <Moon className="w-[18px] h-[18px]" />}
+        </button>
+
         {/* Settings */}
         <button
           onClick={() => navigate('/settings')}
@@ -137,10 +146,18 @@ export default function TopBar({ isSidebarOpen = true, onMenuClick }: TopBarProp
           </div>
         </div>
 
-        {/* Store */}
-        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
-          <Store className="w-4 h-4 text-gray-400" />
-          <span className="text-xs font-semibold text-gray-700">{storeInfo.nameAr}</span>
+        {/* Branch + Store */}
+        <div className="hidden md:flex items-center gap-2">
+          {user?.branchId && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary-50 border border-primary-100">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary-500" />
+              <span className="text-[11px] font-bold text-primary-700">فرع {user.branchId}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
+            <Store className="w-4 h-4 text-gray-400" />
+            <span className="text-xs font-semibold text-gray-700">{storeInfo.nameAr}</span>
+          </div>
         </div>
       </div>
     </header>

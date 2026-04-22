@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Search, ShoppingCart, UserPlus, PauseCircle, RotateCcw, Trash2, Plus, Minus, CreditCard, Percent, Loader2, Receipt, Printer, CheckCircle2, Package } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore';
 import { useProductStore } from '../store/useProductStore';
 import { useCustomerStore } from '../store/useCustomerStore';
 import { useInvoiceStore } from '../store/useInvoiceStore';
 import { useToast } from '../hooks/useToast';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { cn } from '../lib/utils';
 
 export default function POSPage() {
@@ -40,6 +41,35 @@ export default function POSPage() {
   const scanTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const { items, customerId, customerName, subtotal, totalVat, grandTotal, invoiceDiscount, addItem, updateQty, removeItem, setCustomer, setInvoiceDiscount, clearCart } = useCartStore();
+
+  useKeyboardShortcuts(useMemo(() => [
+    {
+      key: 'Escape',
+      handler: () => {
+        if (showSuccessModal) { setShowSuccessModal(false); setLastInvoice(null); }
+        else if (showPaymentModal) setShowPaymentModal(false);
+        else if (showDiscountModal) setShowDiscountModal(false);
+        else if (showCustomerModal) setShowCustomerModal(false);
+        else if (showSuspendedDrawer) setShowSuspendedDrawer(false);
+        else if (showRefundConfirm) setShowRefundConfirm(false);
+        else if (isRefundMode) setIsRefundMode(false);
+      },
+    },
+    {
+      key: 'F1',
+      handler: () => {
+        if (showSuccessModal) { setShowSuccessModal(false); setLastInvoice(null); setPrintError(false); }
+        else if (items.length > 0 && !isRefundMode) { clearCart(); toast.info('تم بدء عملية بيع جديدة'); }
+      },
+    },
+    {
+      key: 'p',
+      ctrl: true,
+      handler: () => {
+        if (lastInvoice && showSuccessModal) handlePrintReceipt();
+      },
+    },
+  ], [showSuccessModal, showPaymentModal, showDiscountModal, showCustomerModal, showSuspendedDrawer, showRefundConfirm, isRefundMode, items.length, lastInvoice]));
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const { products, fetchProducts } = useProductStore();
   const { customers } = useCustomerStore();
@@ -103,7 +133,8 @@ export default function POSPage() {
 
   const handleSuspendCart = () => {
     if (items.length === 0) return;
-    suspendCart(`فاتورة ${suspendedCarts.length + 1}`, { items, customerId, invoiceDiscount, subtotal, totalVat, grandTotal });
+    const label = customerName || `فاتورة ${suspendedCarts.length + 1}`;
+    suspendCart(label, { items, customerId, invoiceDiscount, subtotal, totalVat, grandTotal });
     clearCart();
     toast.info('تم تعليق الفاتورة');
     setShowSuspendedDrawer(false);
@@ -635,13 +666,31 @@ export default function POSPage() {
             </div>
             <div className="p-4 space-y-3 overflow-y-auto h-[calc(100%-4rem)]">
               {suspendedCarts.length === 0 ? <div className="text-center text-gray-400 py-8">لا توجد فواتير معلقة</div> : suspendedCarts.map((cart) => (
-                <div key={cart.id} className="bg-gray-50 rounded-lg p-4">
+                <div key={cart.id} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
                   <div className="flex justify-between items-start mb-2">
-                    <div className="font-medium">{cart.label}</div>
-                    <button onClick={() => deleteSuspended(cart.id)} className="text-gray-400 hover:text-destructive-500"><Trash2 className="w-4 h-4" /></button>
+                    <div>
+                      <div className="font-bold text-sm text-gray-900">{cart.label}</div>
+                      <div className="text-[11px] text-gray-400 mt-0.5">
+                        {new Date(cart.createdAt).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' })}
+                      </div>
+                    </div>
+                    <button onClick={() => deleteSuspended(cart.id)} className="p-1 text-gray-400 hover:text-destructive-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
                   </div>
-                  <div className="text-sm text-gray-500 mb-2">{cart.itemCount} منتجات | {cart.grandTotal.toFixed(2)} ر.س</div>
-                  <button onClick={() => handleRestoreCart(cart.id)} className="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium">استعادة</button>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {cart.items.slice(0, 3).map((item) => (
+                      <span key={item.productId} className="px-2 py-0.5 bg-gray-50 rounded text-[10px] text-gray-600 border border-gray-100">
+                        {item.name} ×{item.qty}
+                      </span>
+                    ))}
+                    {cart.items.length > 3 && (
+                      <span className="px-2 py-0.5 bg-gray-50 rounded text-[10px] text-gray-400 border border-gray-100">+{cart.items.length - 3}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-gray-500">{cart.itemCount} منتجات</div>
+                    <div className="text-sm font-bold text-primary-700">{cart.grandTotal.toFixed(2)} ر.س</div>
+                  </div>
+                  <button onClick={() => handleRestoreCart(cart.id)} className="w-full mt-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-bold transition-colors">استعادة</button>
                 </div>
               ))}
             </div>

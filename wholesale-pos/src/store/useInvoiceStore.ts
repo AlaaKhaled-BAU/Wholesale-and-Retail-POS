@@ -42,6 +42,7 @@ export const useInvoiceStore = create<InvoiceState>()(
           label,
           items: cartData.items,
           customerId: cartData.customerId,
+          customerName: null,
           invoiceDiscount: cartData.invoiceDiscount,
           subtotal: cartData.subtotal,
           totalVat: cartData.totalVat,

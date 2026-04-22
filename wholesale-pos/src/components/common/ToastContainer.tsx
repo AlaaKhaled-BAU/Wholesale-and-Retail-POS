@@ -29,10 +29,12 @@ export default function ToastContainer() {
           <div
             key={toast.id}
             className={cn(
-              'flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg min-w-[300px] max-w-[500px]',
-              'animate-in slide-in-from-left-4 fade-in duration-300',
+              'flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl min-w-[320px] max-w-[520px]',
+              'transform transition-all duration-300 ease-out',
+              'translate-x-0 opacity-100 scale-100',
               toastStyles[toast.type]
             )}
+            style={{ animation: 'toastSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}
           >
             <Icon className="w-5 h-5 flex-shrink-0" />
             <span className="flex-1 text-sm font-medium">{toast.message}</span>

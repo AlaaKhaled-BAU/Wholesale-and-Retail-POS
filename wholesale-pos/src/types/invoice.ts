@@ -34,6 +34,7 @@ export interface SuspendedCart {
   label: string;
   items: import('./cart').CartItem[];
   customerId: string | null;
+  customerName: string | null;
   invoiceDiscount: number;
   subtotal: number;
   totalVat: number;

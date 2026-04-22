@@ -33,6 +33,8 @@ const DEFAULT_SETTINGS: AppSettings = {
 interface SettingsState extends AppSettings {
   isLoading: boolean;
   error: string | null;
+  darkMode: boolean;
+  toggleDarkMode: () => void;
   fetchSettings: () => Promise<void>;
   updateSettings: (settings: Partial<AppSettings>) => Promise<void>;
   updateStoreInfo: (storeInfo: Partial<AppSettings['storeInfo']>) => void;
@@ -48,6 +50,16 @@ export const useSettingsStore = create<SettingsState>()(
       ...DEFAULT_SETTINGS,
       isLoading: false,
       error: null,
+      darkMode: false,
+
+      toggleDarkMode: () => {
+        set((state) => {
+          const next = !state.darkMode;
+          if (next) document.documentElement.classList.add('dark');
+          else document.documentElement.classList.remove('dark');
+          return { darkMode: next };
+        });
+      },
 
       fetchSettings: async () => {
         set({ isLoading: true, error: null });
