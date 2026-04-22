@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Store, Printer, Users, Percent, Barcode, Shield, Save, TestTube } from 'lucide-react';
+import { Store, Printer, Users, Percent, Barcode, Shield, Save, TestTube, Plus, Pencil, Power, X } from 'lucide-react';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useToast } from '../hooks/useToast';
 import { cn } from '../lib/utils';
@@ -20,6 +20,65 @@ export default function SettingsPage() {
   } = useSettingsStore();
 
   const [activeSection, setActiveSection] = useState<'store' | 'printer' | 'users' | 'tax' | 'barcode' | 'zatca'>('store');
+
+  // Users management state
+  const [users, setUsers] = useState([
+    { id: '1', name: 'أحمد محمد', role: 'cashier', branchId: '1', isActive: true, pin: '1234' },
+    { id: '2', name: 'خالد العلي', role: 'manager', branchId: '1', isActive: true, pin: '5678' },
+  ]);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<typeof users[0] | null>(null);
+  const [userForm, setUserForm] = useState({ name: '', role: 'cashier' as const, pin: '', confirmPin: '', isActive: true });
+
+  const roles = [
+    { value: 'admin', label: 'مسؤول' },
+    { value: 'manager', label: 'مدير' },
+    { value: 'cashier', label: 'كاشير' },
+    { value: 'stock', label: 'مخزن' },
+    { value: 'accountant', label: 'محاسب' },
+  ];
+
+  const handleSaveUser = () => {
+    if (!userForm.name || !userForm.pin) {
+      toast.error('الاسم والرمز السري مطلوبان');
+      return;
+    }
+    if (userForm.pin !== userForm.confirmPin) {
+      toast.error('الرمز السري غير متطابق');
+      return;
+    }
+    if (userForm.pin.length !== 4) {
+      toast.error('الرمز السري يجب أن يكون 4 أرقام');
+      return;
+    }
+    if (editingUser) {
+      setUsers(users.map((u) => (u.id === editingUser.id ? { ...u, name: userForm.name, role: userForm.role, pin: userForm.pin, isActive: userForm.isActive } : u)));
+      toast.success('تم تحديث المستخدم بنجاح');
+    } else {
+      setUsers([...users, { id: String(Date.now()), name: userForm.name, role: userForm.role, branchId: '1', isActive: userForm.isActive, pin: userForm.pin }]);
+      toast.success('تم إضافة المستخدم بنجاح');
+    }
+    setShowUserModal(false);
+    setEditingUser(null);
+    setUserForm({ name: '', role: 'cashier', pin: '', confirmPin: '', isActive: true });
+  };
+
+  const handleToggleUser = (id: string) => {
+    setUsers(users.map((u) => (u.id === id ? { ...u, isActive: !u.isActive } : u)));
+    toast.info('تم تغيير حالة المستخدم');
+  };
+
+  const openAddUser = () => {
+    setEditingUser(null);
+    setUserForm({ name: '', role: 'cashier', pin: '', confirmPin: '', isActive: true });
+    setShowUserModal(true);
+  };
+
+  const openEditUser = (user: typeof users[0]) => {
+    setEditingUser(user);
+    setUserForm({ name: user.name, role: user.role as any, pin: '', confirmPin: '', isActive: user.isActive });
+    setShowUserModal(true);
+  };
 
   const sections = [
     { id: 'store' as const, label: 'معلومات المتجر', icon: Store },
@@ -185,10 +244,68 @@ export default function SettingsPage() {
           {/* Users Section */}
           {activeSection === 'users' && (
             <div className="space-y-6">
-              <h2 className="text-xl font-bold mb-6">إدارة المستخدمين</h2>
-              <div className="bg-gray-50 rounded-lg p-8 text-center">
-                <Users className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                <p className="text-gray-500">سيتم إضافة إدارة المستخدمين في التحديث القادم</p>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold">إدارة المستخدمين</h2>
+                <button
+                  onClick={openAddUser}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  إضافة مستخدم
+                </button>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">الاسم</th>
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">الدور</th>
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">الفرع</th>
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">الحالة</th>
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">إجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {users.map((user) => (
+                      <tr key={user.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{user.name}</td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs">
+                            {roles.find((r) => r.value === user.role)?.label || user.role}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">فرع {user.branchId}</td>
+                        <td className="px-4 py-3">
+                          <span className={cn('text-xs font-medium', user.isActive ? 'text-success-600' : 'text-gray-400')}>
+                            {user.isActive ? 'نشط' : 'معطل'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => openEditUser(user)}
+                              className="p-1 text-gray-400 hover:text-primary-600 transition-colors"
+                              title="تعديل"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleToggleUser(user.id)}
+                              className={cn(
+                                'p-1 transition-colors',
+                                user.isActive ? 'text-gray-400 hover:text-destructive-500' : 'text-gray-400 hover:text-success-500'
+                              )}
+                              title={user.isActive ? 'تعطيل' : 'تفعيل'}
+                            >
+                              <Power className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -311,6 +428,87 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* User Modal */}
+      {showUserModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-bold">{editingUser ? 'تعديل مستخدم' : 'إضافة مستخدم'}</h2>
+              <button onClick={() => setShowUserModal(false)} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">الاسم *</label>
+                <input
+                  type="text"
+                  value={userForm.name}
+                  onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-right"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">الدور *</label>
+                <select
+                  value={userForm.role}
+                  onChange={(e) => setUserForm({ ...userForm, role: e.target.value as any })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {roles.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{editingUser ? 'رمز سري جديد (اختياري)' : 'الرمز السري *'}</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={userForm.pin}
+                  onChange={(e) => setUserForm({ ...userForm, pin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                  placeholder="4 أرقام"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-right"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">تأكيد الرمز السري *</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={userForm.confirmPin}
+                  onChange={(e) => setUserForm({ ...userForm, confirmPin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                  placeholder="4 أرقام"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-right"
+                />
+              </div>
+              {editingUser && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="user-active"
+                    checked={userForm.isActive}
+                    onChange={(e) => setUserForm({ ...userForm, isActive: e.target.checked })}
+                    className="w-4 h-4"
+                  />
+                  <label htmlFor="user-active" className="text-sm">المستخدم نشط</label>
+                </div>
+              )}
+            </div>
+            <div className="p-6 border-t border-gray-200 flex gap-3">
+              <button onClick={() => setShowUserModal(false)} className="flex-1 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50">إلغاء</button>
+              <button
+                onClick={handleSaveUser}
+                disabled={!userForm.name || (!editingUser && (!userForm.pin || userForm.pin.length !== 4))}
+                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-bold disabled:opacity-50"
+              >
+                حفظ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -23,6 +23,7 @@ export default function POSPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastInvoice, setLastInvoice] = useState<import('../types').Invoice | null>(null);
   const [isPrintingReceipt, setIsPrintingReceipt] = useState(false);
+  const [printError, setPrintError] = useState(false);
   
   const [refundInvoiceNumber, setRefundInvoiceNumber] = useState('');
   const [refundInvoice, setRefundInvoice] = useState<{
@@ -137,13 +138,16 @@ export default function POSPage() {
   const handlePrintReceipt = async () => {
     if (!lastInvoice) return;
     setIsPrintingReceipt(true);
+    setPrintError(false);
     try {
       // TODO: Replace with real Tauri invoke when Dev B implements print_receipt
       // await printReceipt(lastInvoice.id);
       await new Promise((resolve) => setTimeout(resolve, 800)); // Mock
       toast.success('تم إرسال الإيصال للطباعة');
+      setPrintError(false);
     } catch (error) {
-      toast.error('فشل في الطباعة — يمكنك إعادة المحاولة من قائمة الفواتير');
+      setPrintError(true);
+      toast.error('فشل في الطباعة — اضغط إعادة المحاولة');
     } finally {
       setIsPrintingReceipt(false);
     }
@@ -486,16 +490,27 @@ export default function POSPage() {
             </div>
 
             <div className="p-6 border-t border-gray-200 space-y-2">
+              {printError && (
+                <div className="bg-destructive-50 border border-destructive-200 rounded-lg p-3 mb-2">
+                  <div className="text-sm text-destructive-700 font-medium">فشل في طباعة الإيصال</div>
+                  <div className="text-xs text-destructive-600">تم حفظ الفاتورة. يمكنك إعادة المحاولة.</div>
+                </div>
+              )}
               <button
                 onClick={handlePrintReceipt}
                 disabled={isPrintingReceipt}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-bold disabled:opacity-50"
+                className={cn(
+                  'w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold disabled:opacity-50',
+                  printError
+                    ? 'bg-destructive-600 text-white hover:bg-destructive-700'
+                    : 'bg-primary-600 text-white hover:bg-primary-700'
+                )}
               >
                 {isPrintingReceipt ? <Loader2 className="w-5 h-5 animate-spin" /> : <Printer className="w-5 h-5" />}
-                {isPrintingReceipt ? 'جاري الطباعة...' : 'طباعة الإيصال'}
+                {isPrintingReceipt ? 'جاري الطباعة...' : printError ? 'إعادة المحاولة' : 'طباعة الإيصال'}
               </button>
               <button
-                onClick={() => { setShowSuccessModal(false); setLastInvoice(null); }}
+                onClick={() => { setShowSuccessModal(false); setLastInvoice(null); setPrintError(false); }}
                 className="w-full px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 بيع جديد
