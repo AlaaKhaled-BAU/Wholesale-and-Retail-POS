@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Search, ShoppingCart, UserPlus, PauseCircle, RotateCcw, Trash2, Plus, Minus, CreditCard, Percent, Loader2, Receipt, Printer, CheckCircle2 } from 'lucide-react';
+import { Search, ShoppingCart, UserPlus, PauseCircle, RotateCcw, Trash2, Plus, Minus, CreditCard, Percent, Loader2, Receipt, Printer, CheckCircle2, Package } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore';
 import { useProductStore } from '../store/useProductStore';
 import { useCustomerStore } from '../store/useCustomerStore';
@@ -32,6 +32,7 @@ export default function POSPage() {
     lines: { productId: string; name: string; qty: number; unitPrice: number; selectedQty: number }[];
   } | null>(null);
   const [isSearchingInvoice, setIsSearchingInvoice] = useState(false);
+  const [showRefundConfirm, setShowRefundConfirm] = useState(false);
   
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -39,8 +40,11 @@ export default function POSPage() {
   const scanTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const { items, customerId, customerName, subtotal, totalVat, grandTotal, invoiceDiscount, addItem, updateQty, removeItem, setCustomer, setInvoiceDiscount, clearCart } = useCartStore();
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const { products, fetchProducts } = useProductStore();
   const { customers } = useCustomerStore();
+
+  const categories = ['all', ...Array.from(new Set(products.map((p) => p.categoryName).filter((c): c is string => !!c)))];
   const { suspendedCarts, suspendCart, restoreCart, deleteSuspended, createInvoice } = useInvoiceStore();
 
   useEffect(() => {
@@ -188,8 +192,12 @@ export default function POSPage() {
     if (!refundInvoice) return;
     const selectedLines = refundInvoice.lines.filter((l) => l.selectedQty > 0);
     if (selectedLines.length === 0) { toast.warning('يرجى اختيار منتجات للإرجاع'); return; }
+    setShowRefundConfirm(true);
+  };
+
+  const confirmRefund = () => {
     toast.success('تم معالجة الإرجاع بنجاح');
-    setRefundInvoice(null); setRefundInvoiceNumber(''); setIsRefundMode(false);
+    setRefundInvoice(null); setRefundInvoiceNumber(''); setIsRefundMode(false); setShowRefundConfirm(false);
   };
 
   return (
@@ -282,11 +290,69 @@ export default function POSPage() {
               </div>
             )}
             {!searchQuery && (
-              <div className="flex-1 bg-white rounded-xl shadow-sm p-6">
-                <div className="text-center text-gray-400 py-12">
-                  <ShoppingCart className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg">ابدأ بمسح المنتجات أو البحث</p>
-                  <p className="text-sm mt-2">استخدم الباركود أو اكتب اسم المنتج</p>
+              <div className="flex-1 bg-white rounded-xl shadow-sm p-4 flex flex-col overflow-hidden">
+                {/* Category Filter */}
+                <div className="flex gap-2 overflow-x-auto pb-3 mb-3 border-b border-gray-100">
+                  {categories.map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={cn(
+                        'px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors',
+                        selectedCategory === cat
+                          ? 'bg-primary-600 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      )}
+                    >
+                      {cat === 'all' ? 'الكل' : cat}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Product Grid */}
+                <div className="flex-1 overflow-y-auto -mx-4 px-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {products
+                      .filter((p) => selectedCategory === 'all' || p.categoryName === selectedCategory)
+                      .map((product) => (
+                        <button
+                          key={product.id}
+                          onClick={() => handleProductClick(product)}
+                          className={cn(
+                            'flex flex-col items-center text-center p-4 rounded-xl border transition-all duration-200',
+                            'hover:border-primary-300 hover:shadow-md hover:-translate-y-0.5 active:scale-95',
+                            product.stockQty <= product.minStock
+                              ? 'border-rose-200 bg-rose-50/50'
+                              : 'border-gray-200 bg-white'
+                          )}
+                        >
+                          <div className="w-12 h-12 rounded-xl bg-primary-50 flex items-center justify-center mb-2">
+                            <Package className="w-6 h-6 text-primary-400" />
+                          </div>
+                          <div className="text-sm font-semibold text-gray-900 line-clamp-2 leading-tight mb-1">
+                            {product.nameAr}
+                          </div>
+                          <div className="text-xs text-primary-700 font-bold">
+                            {product.sellPrice.toFixed(2)} ر.س
+                          </div>
+                          <div className={cn(
+                            'text-[10px] mt-1 px-1.5 py-0.5 rounded-full',
+                            product.stockQty <= product.minStock
+                              ? 'bg-rose-100 text-rose-600'
+                              : 'bg-gray-100 text-gray-500'
+                          )}>
+                            مخزون: {product.stockQty}
+                          </div>
+                        </button>
+                      ))}
+                  </div>
+                  {products.length === 0 && (
+                    <div className="text-center text-gray-400 py-12">
+                      <ShoppingCart className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                      <p className="text-lg">ابدأ بمسح المنتجات أو البحث</p>
+                      <p className="text-sm mt-2">استخدم الباركود أو اكتب اسم المنتج</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -514,6 +580,45 @@ export default function POSPage() {
                 className="w-full px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 بيع جديد
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refund Confirmation Modal */}
+      {showRefundConfirm && refundInvoice && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
+            <div className="text-center mb-6">
+              <div className="w-14 h-14 bg-destructive-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <RotateCcw className="w-7 h-7 text-destructive-600" />
+              </div>
+              <h2 className="text-lg font-bold text-gray-900">تأكيد الإرجاع</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                هل أنت متأكد من إرجاع المنتجات المحددة؟ لا يمكن التراجع عن هذا الإجراء.
+              </p>
+            </div>
+            <div className="space-y-2 mb-6">
+              {refundInvoice.lines.filter((l) => l.selectedQty > 0).map((line) => (
+                <div key={line.productId} className="flex justify-between text-sm bg-gray-50 rounded-lg p-3">
+                  <span className="font-medium">{line.name}</span>
+                  <span className="text-gray-500">{line.selectedQty} × {line.unitPrice.toFixed(2)} ر.س</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRefundConfirm(false)}
+                className="flex-1 px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={confirmRefund}
+                className="flex-1 px-4 py-3 bg-destructive-600 text-white rounded-lg hover:bg-destructive-700 font-bold transition-colors"
+              >
+                تأكيد الإرجاع
               </button>
             </div>
           </div>

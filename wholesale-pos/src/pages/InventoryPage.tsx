@@ -112,6 +112,21 @@ export default function InventoryPage() {
         </button>
       </div>
 
+      {/* Low Stock Summary */}
+      {products.some((p) => p.stockQty <= p.minStock) && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center">
+            <Package className="w-4 h-4 text-rose-600" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-rose-700">
+              {products.filter((p) => p.stockQty <= p.minStock).length} منتجات بمخزون منخفض
+            </div>
+            <div className="text-xs text-rose-500">يرجى مراجعة المنتجات وإعادة الطلب</div>
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm p-4 flex gap-4">
         <div className="flex-1 relative">
@@ -174,11 +189,18 @@ export default function InventoryPage() {
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{product.sellPrice.toFixed(2)} ر.س</td>
                   <td className="px-4 py-3 text-sm text-gray-500">{product.vatRate}%</td>
                   <td className="px-4 py-3 text-sm">
-                    <span className={cn(
-                      product.stockQty <= product.minStock ? 'text-destructive-600 font-medium' : 'text-gray-900'
-                    )}>
-                      {product.stockQty}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        product.stockQty <= product.minStock ? 'text-destructive-600 font-bold' : 'text-gray-900'
+                      )}>
+                        {product.stockQty}
+                      </span>
+                      {product.stockQty <= product.minStock && (
+                        <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-600 text-[10px] font-bold">
+                          مخزون منخفض
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <button

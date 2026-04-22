@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Search, Printer, Eye, FileText, CheckCircle2, Clock, XCircle, CalendarDays, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Printer, Eye, FileText, CheckCircle2, Clock, XCircle, CalendarDays, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useInvoiceStore } from '../store/useInvoiceStore';
 import { useToast } from '../hooks/useToast';
 import { cn } from '../lib/utils';
@@ -15,9 +15,18 @@ export default function InvoicesPage() {
   const toast = useToast();
   const { invoices } = useInvoiceStore();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDate, setSelectedDate] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<typeof invoices[0] | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+
+  const ITEMS_PER_PAGE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, dateFrom, dateTo]);
 
   const filteredInvoices = invoices.filter((inv) => {
     const matchesSearch =
@@ -25,13 +34,18 @@ export default function InvoicesPage() {
       inv.customerName?.includes(searchQuery);
 
     let matchesDate = true;
-    if (selectedDate) {
-      const invDate = new Date(inv.createdAt).toISOString().split('T')[0];
-      matchesDate = invDate === selectedDate;
-    }
+    const invDate = new Date(inv.createdAt).toISOString().split('T')[0];
+    if (dateFrom && invDate < dateFrom) matchesDate = false;
+    if (dateTo && invDate > dateTo) matchesDate = false;
 
     return matchesSearch && matchesDate;
   });
+
+  const totalPages = Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE) || 1;
+  const paginatedInvoices = filteredInvoices.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   const handlePrint = async (_invoiceId: string) => {
     setIsPrinting(true);
@@ -73,19 +87,31 @@ export default function InvoicesPage() {
           />
         </div>
 
-        <div className="relative flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <div className="relative">
-            <CalendarDays className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            <CalendarDays className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <input
               type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="pr-10 pl-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-right text-sm text-gray-700"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              placeholder="من"
+              className="pr-9 pl-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-right text-xs text-gray-700 w-36"
             />
           </div>
-          {selectedDate && (
+          <span className="text-gray-400 text-xs">—</span>
+          <div className="relative">
+            <CalendarDays className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              placeholder="إلى"
+              className="pr-9 pl-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-right text-xs text-gray-700 w-36"
+            />
+          </div>
+          {(dateFrom || dateTo) && (
             <button
-              onClick={() => setSelectedDate('')}
+              onClick={() => { setDateFrom(''); setDateTo(''); }}
               className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
               title="إلغاء التصفية بالتاريخ"
             >
@@ -111,7 +137,7 @@ export default function InvoicesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredInvoices.map((invoice) => {
+              {paginatedInvoices.map((invoice) => {
                 const status = statusConfig[invoice.status] || statusConfig.draft;
                 const StatusIcon = status.icon;
                 return (
@@ -164,6 +190,47 @@ export default function InvoicesPage() {
           <div className="text-center py-12 text-gray-400">
             <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
             <p>لا توجد فواتير</p>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {filteredInvoices.length > 0 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+            <div className="text-xs text-gray-500">
+              عرض {(currentPage - 1) * ITEMS_PER_PAGE + 1} إلى{' '}
+              {Math.min(currentPage * ITEMS_PER_PAGE, filteredInvoices.length)} من{' '}
+              {filteredInvoices.length} فاتورة
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={cn(
+                    'w-7 h-7 rounded-lg text-xs font-medium transition-colors',
+                    currentPage === page
+                      ? 'bg-primary-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  )}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
       </div>
