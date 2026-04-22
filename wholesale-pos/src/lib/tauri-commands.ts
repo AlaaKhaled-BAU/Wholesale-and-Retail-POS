@@ -101,6 +101,11 @@ export const printTestPage = () =>
 export const getAvailablePorts = () =>
   invoke<string[]>('get_available_ports');
 
+// ─── Scanner ────────────────────────────────────────────
+
+export const checkScannerConnected = () =>
+  invoke<{ connected: boolean; deviceName?: string }>('check_scanner_connected');
+
 // ─── ZATCA ──────────────────────────────────────────────
 
 export const registerZatcaDevice = () =>

@@ -1,12 +1,14 @@
-import { Settings, LogOut, Store } from 'lucide-react';
+import { Settings, LogOut, Store, ScanBarcode } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { useScannerStatus } from '../../hooks/useScannerStatus';
 
 export default function TopBar() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const { storeInfo } = useSettingsStore();
+  const { status: scannerStatus } = useScannerStatus();
 
   const handleLogout = () => {
     logout();
@@ -24,9 +26,39 @@ export default function TopBar() {
     return roles[role] || role;
   };
 
+  const getScannerTooltip = () => {
+    switch (scannerStatus) {
+      case 'connected':
+        return 'قارئ الباركود متصل';
+      case 'disconnected':
+        return 'قارئ الباركود غير متصل';
+      default:
+        return 'حالة قارئ الباركود غير معروفة';
+    }
+  };
+
+  const getScannerDotColor = () => {
+    switch (scannerStatus) {
+      case 'connected':
+        return 'bg-success-500';
+      case 'disconnected':
+        return 'bg-destructive-500';
+      default:
+        return 'bg-gray-400';
+    }
+  };
+
   return (
     <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
       <div className="flex items-center gap-4">
+        <div
+          className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-lg cursor-default"
+          title={getScannerTooltip()}
+        >
+          <ScanBarcode className="w-4 h-4 text-gray-600" />
+          <span className="text-xs font-medium text-gray-600">قارئ الباركود</span>
+          <span className={`w-2.5 h-2.5 rounded-full ${getScannerDotColor()}`} />
+        </div>
         <button
           onClick={() => navigate('/settings')}
           className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
