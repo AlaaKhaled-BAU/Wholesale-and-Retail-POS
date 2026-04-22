@@ -76,7 +76,9 @@ wholesale-pos/
     │   └── csvExport.ts          # CSV download
     ├── hooks/                    # Reusable logic
     │   ├── useToast.ts           # Toast store + hook
-    │   └── useIdleTimer.ts       # Auto-lock timer
+    │   ├── useIdleTimer.ts       # Auto-lock timer
+    │   ├── useScannerStatus.ts   # Barcode scanner connectivity detection
+    │   └── useKeyboardShortcuts.ts # Global keyboard shortcuts (Esc, F1, Ctrl+P)
     ├── styles/
     │   └── base.css              # Design tokens + RTL reset
     ├── store/                    # Zustand stores
@@ -401,15 +403,22 @@ wholesale-pos/
 ## 4. Git Commit History
 
 ```
-develop
+UI (pushed to GitHub)
+├── [325317c] feat: nice-to-have polish — receipt preview, customer balance, invoice status tabs, CSV export
+├── [a2a19b4] feat: medium-priority polish — suspended cart preview, keyboard shortcuts, toast animations, dark mode toggle, branch indicator
+├── [f71a046] feat: high-priority polish — product grid, invoice pagination, date range filter, refund confirm, low stock alerts
+├── [c46b7c2] feat: add date filter icon to invoices page for filtering sales by day/month/year
+├── [d60e57d] ui: sidebar hidden by default, toggle via menu icon
+├── [dc4866d] ui: polish TopBar, Sidebar and AppShell — pro layout with animated icons, backdrop blur, active states
+├── [1d1662b] feat: add hamburger menu icon to TopBar for toggling Sidebar
+├── [1b0279e] feat: add barcode scanner connectivity indicator in TopBar
+├── [72ba6d4] fix: remove broken shadcn CSS imports causing dashboard crash
+├── [1dbf01e] fix: address all 5 immediate action items — G1/G2/G3/G4/G5
+├── [e7d1ba7] docs: add comprehensive development log covering all frontend work
 ├── [1eeddab] feat: add invoice history page, ZATCA badges, post-payment success modal with QR placeholder
-│              - InvoicesPage.tsx, success modal, route updates
 ├── [3ad6f35] feat: complete Phase 8 polish — toasts, idle timer, loading states, CSV export, refund mode
-│              - useToast, useIdleTimer, ToastContainer, csvExport, tauri-commands, POSPage rewrite
 ├── [6221b0e] fix: resolve TypeScript unused variable errors and build issues
-│              - Removed unused imports, fixed selectedCustomer reference
 └── [84ce063] feat: complete frontend foundation with all pages, stores, and components
-               - All 6 pages, 6 stores, types, layout, common components
 ```
 
 ---
@@ -509,9 +518,133 @@ const { token, user } = await loginUser(pin);
 
 ---
 
-**Summary:** The entire frontend UI is complete, polished, and buildable. All 7 pages work with mock data. Every Tauri command has a typed wrapper ready. The only remaining work is replacing mock data with real `invoke()` calls as Dev B delivers each backend command.
+---
 
-**Total lines of code:** ~8,000+
-**Total files created:** 50+
-**Git commits on develop:** 4
+## 9. Session 2 — Post-Phase-8 Polish (2026-04-22)
+
+### 9.1 High Priority Features
+
+**HP-1 — Quick Product Grid on POS**
+- [x] Category filter pills (horizontal scroll): "الكل" + all unique categories
+- [x] Product grid: 2-4 columns responsive, clickable tiles
+- [x] Each tile: package icon, name, price, stock count
+- [x] Low stock tiles have rose border + "مخزون: X" badge
+- [x] Hover: border highlight + shadow + lift animation
+- [x] Click adds to cart (same as barcode search)
+
+**HP-2 — Invoice Pagination**
+- [x] 10 invoices per page
+- [x] Numbered page buttons with active highlight
+- [x] Prev/Next chevron buttons
+- [x] Range indicator: "عرض X إلى Y من Z فاتورة"
+- [x] Auto-reset to page 1 when filters change
+
+**HP-3 — Date Range Filter on Invoices**
+- [x] Replaced single date with "From → To" dual inputs
+- [x] Each input has CalendarDays icon
+- [x] Clear button (X) appears when either date is set
+- [x] Filters invoices where createdAt is within range (inclusive)
+
+**HP-4 — Refund Confirmation Dialog**
+- [x] Destructive confirmation modal before processing refund
+- [x] Shows RotateCcw icon in rose circle
+- [x] Lists all selected items with qty × price
+- [x] Cancel + "تأكيد الإرجاع" buttons
+- [x] Warning text: "لا يمكن التراجع عن هذا الإجراء"
+
+**HP-5 — Low Stock Alert Badge**
+- [x] Inventory table: red "مخزون منخفض" badge next to stock count
+- [x] Red text + bold for low stock quantities
+- [x] Summary banner at top of inventory page when any product is low
+- [x] Banner shows count + "يرجى مراجعة المنتجات وإعادة الطلب"
+
+### 9.2 Medium Priority Features
+
+**MP-1 — Suspended Cart Preview**
+- [x] Drawer cards show customer name as title (was generic "فاتورة N")
+- [x] Timestamp displayed: full Arabic date/time
+- [x] Item tags: first 3 items as pills (name × qty), +N for overflow
+- [x] Separated item count and grand total on their own line
+- [x] Restore button full width at bottom
+
+**MP-2 — Keyboard Shortcuts**
+- [x] `Esc` — closes any open modal/drawer/refund mode
+- [x] `F1` — starts new sale (clears cart if success modal open)
+- [x] `Ctrl+P` — prints receipt (only when success modal is open)
+- [x] Implemented via `useKeyboardShortcuts` hook
+- [x] Ignored when typing in inputs (except Escape)
+
+**MP-3 — Toast Animation**
+- [x] Custom `@keyframes toastSlideIn` with cubic-bezier(0.16, 1, 0.3, 1)
+- [x] Slide from right + scale up + fade in
+- [x] Rounded-xl + shadow-xl styling
+- [x] Duration: 400ms
+
+**MP-4 — Dark Mode Toggle**
+- [x] 🌙 Moon / ☀️ Sun icon in TopBar
+- [x] Toggles `.dark` class on `<html>` element
+- [x] Persisted in settings-storage (Zustand persist)
+- [x] Initialized before React mounts (reads localStorage in main.tsx)
+- [x] Hover: amber color + amber bg
+
+**MP-5 — Branch Indicator**
+- [x] "فرع N" pill badge in TopBar (right section)
+- [x] Green dot + primary-50 background
+- [x] Only shows when user has branchId
+
+### 9.3 Nice-to-Have Features
+
+**NH-1 — Receipt Preview Modal**
+- [x] "معاينة الإيصال" button inside payment modal
+- [x] Thermal receipt style: store name, address, VAT number
+- [x] Item list: name × qty, line totals
+- [x] Summary: subtotal, discount, VAT, grand total
+- [x] Dashed border separators, Arabic date
+- [x] "شكراً لزيارتكم" footer
+
+**NH-2 — Customer Outstanding Balance**
+- [x] Shows in POS cart when B2B customer selected
+- [x] Displays: "الرصيد المتبقي: X ر.س"
+- [x] Turns rose when balance > 80% of credit limit
+- [x] Fetches from customer store in real-time
+
+**NH-3 — Invoice Status Filter Tabs**
+- [x] Tabs above invoice table: الكل / مُبلَّغ / معلق / مرفوض
+- [x] Each tab shows count badge
+- [x] Active tab: primary-50 bg + primary ring
+- [x] Works with search + date range (AND logic)
+
+**NH-4 — CSV Export on Reports**
+- [x] Already existed on all 4 report tabs
+- [x] UTF-8 BOM for Arabic Excel compatibility
+- [x] Verified working
+
+### 9.4 Additional UI Polish
+
+**Scanner Connectivity Indicator**
+- [x] TopBar shows "قارئ الباركود" with colored dot
+- [x] Green = recent scan detected (within 60s)
+- [x] Red = no scan for 60s
+- [x] Gray = unknown (no scans yet)
+- [x] Optional Tauri hardware check via `checkScannerConnected()`
+
+**Sidebar Toggle**
+- [x] Hamburger menu icon (☰) in TopBar
+- [x] Sidebar hidden by default on app launch
+- [x] Click toggles open/close with smooth animation
+- [x] Mobile: overlay + slide from right
+- [x] Desktop: content area expands when sidebar hidden
+
+**Pro Layout Redesign**
+- [x] TopBar: backdrop-blur, pill-shaped buttons, active states
+- [x] Sidebar: logo icon + stacked text header, icon badges on nav items
+- [x] AppShell: cubic-bezier transitions, backdrop blur overlay
+
+---
+
+**Summary:** The entire frontend UI is complete, polished, and buildable. All 7 pages work with mock data. 14 additional features added in Session 2. Every Tauri command has a typed wrapper ready. The only remaining work is replacing mock data with real `invoke()` calls as Dev B delivers each backend command.
+
+**Total lines of code:** ~9,000+
+**Total files created:** 55+
+**Git commits on UI branch:** 15
 **Build status:** ✅ PASSING

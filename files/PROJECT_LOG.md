@@ -8,7 +8,7 @@
 | Field | Value |
 |-------|-------|
 | **Current Phase** | Phase 8 — Complete (waiting for Dev B backend) |
-| **Last Updated** | 2026-04-22 |
+| **Last Updated** | 2026-04-22 (Session 2) |
 | **Active Dev** | Dev A (Frontend) — all UI complete |
 | **Blocking Issue** | Dev B backend commands not yet delivered |
 
@@ -325,3 +325,44 @@ These Tauri commands are implemented and available for Dev A to use. Dev B updat
 | G4 | shadcn/ui not installed | Installed via `pnpm dlx shadcn@latest init`. Added `@/*` alias to tsconfig. | 2026-04-22 |
 | G5 | Users section is placeholder | Replaced with full CRUD: table, add/edit modal, PIN validation (4 digits), role dropdown, soft disable | 2026-04-22 |
 | G7 | React 19 decision not logged | Added to Decision Log with rationale | 2026-04-22 |
+
+---
+
+### 2026-04-22 — Session 2 — UI Polish & Feature Additions
+**Owner**: Dev A
+**Duration**: 1 session
+**Deliverable achieved**: ✅ 14 new features
+
+#### High Priority (5 features)
+| # | Feature | Status |
+|---|---------|--------|
+| HP-1 | Quick Product Grid on POS | ✅ Category-filtered clickable tiles with name/price/stock |
+| HP-2 | Invoice Pagination | ✅ 10 per page with numbered buttons + range indicator |
+| HP-3 | Date Range Filter on Invoices | ✅ "From → To" dual date inputs with clear button |
+| HP-4 | Refund Confirmation Dialog | ✅ Destructive modal showing items before processing |
+| HP-5 | Low Stock Alert Badge | ✅ Red "مخزون منخفض" badge on inventory table + summary banner |
+
+#### Medium Priority (5 features)
+| # | Feature | Status |
+|---|---------|--------|
+| MP-1 | Suspended Cart Preview | ✅ Shows customer name, item tags, timestamp, total |
+| MP-2 | Keyboard Shortcuts | ✅ `Esc` closes modals, `F1` new sale, `Ctrl+P` print receipt |
+| MP-3 | Toast Animation | ✅ Slide-in + scale with cubic-bezier easing |
+| MP-4 | Dark Mode Toggle | ✅ 🌙/☀️ icon in TopBar toggles `.dark` class |
+| MP-5 | Branch Indicator | ✅ "فرع N" pill badge in TopBar for logged-in user |
+
+#### Nice-to-Have (4 features)
+| # | Feature | Status |
+|---|---------|--------|
+| NH-1 | Receipt Preview Modal | ✅ Thermal-style preview before payment confirmation |
+| NH-2 | Customer Outstanding Balance | ✅ Credit remaining shown in POS cart for B2B customers |
+| NH-3 | Invoice Status Filter Tabs | ✅ "الكل/مُبلَّغ/معلق/مرفوض" tabs with counts |
+| NH-4 | CSV Export on Reports | ✅ Already existed; verified on all 4 report tabs |
+
+**Additional Polish**:
+- ✅ Scanner connectivity indicator in TopBar (green/red/gray dot)
+- ✅ Hamburger menu icon toggles sidebar (hidden by default)
+- ✅ Pro TopBar/Sidebar redesign: backdrop blur, animated icons, active states
+- ✅ Sidebar slide animation with overlay on mobile
+
+---
