@@ -73,6 +73,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             // Auth (Phase 1)
             commands::users::login_user,
+            commands::users::logout_user,
             commands::users::open_cashier_session,
             commands::users::close_cashier_session,
             commands::users::get_current_session,

@@ -154,3 +154,12 @@ pub fn get_current_session(
 
     Ok(session)
 }
+
+#[tauri::command]
+pub fn logout_user(state: State<AppState>) -> Result<bool, String> {
+    // Clear current session from AppState
+    if let Ok(mut guard) = state.current_session.lock() {
+        *guard = None;
+    }
+    Ok(true)
+}
