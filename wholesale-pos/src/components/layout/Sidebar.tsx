@@ -4,6 +4,7 @@ import {
   ShoppingCart,
   Package,
   Users,
+  FileText,
   BarChart3,
   Settings,
 } from 'lucide-react';
@@ -14,6 +15,7 @@ const navItems = [
   { path: '/pos', label: 'المبيعات', icon: ShoppingCart },
   { path: '/inventory', label: 'المخزون', icon: Package },
   { path: '/customers', label: 'العملاء', icon: Users },
+  { path: '/invoices', label: 'الفواتير', icon: FileText },
   { path: '/reports', label: 'التقارير', icon: BarChart3 },
   { path: '/settings', label: 'الإعدادات', icon: Settings },
 ];

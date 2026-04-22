@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Search, ShoppingCart, UserPlus, PauseCircle, RotateCcw, Trash2, Plus, Minus, CreditCard, Percent, Loader2, Receipt } from 'lucide-react';
+import { Search, ShoppingCart, UserPlus, PauseCircle, RotateCcw, Trash2, Plus, Minus, CreditCard, Percent, Loader2, Receipt, Printer, CheckCircle2 } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore';
 import { useProductStore } from '../store/useProductStore';
 import { useCustomerStore } from '../store/useCustomerStore';
@@ -20,6 +20,9 @@ export default function POSPage() {
   const [cardAmount, setCardAmount] = useState('');
   const [discountAmount, setDiscountAmount] = useState('');
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [lastInvoice, setLastInvoice] = useState<import('../types').Invoice | null>(null);
+  const [isPrintingReceipt, setIsPrintingReceipt] = useState(false);
   
   const [refundInvoiceNumber, setRefundInvoiceNumber] = useState('');
   const [refundInvoice, setRefundInvoice] = useState<{
@@ -118,6 +121,8 @@ export default function POSPage() {
       const invoice = await createInvoice({ items, customerId, invoiceDiscount, subtotal, totalVat, grandTotal, paymentMethod, paymentDetails });
       if (invoice) {
         clearCart(); setShowPaymentModal(false); setCashAmount(''); setCardAmount('');
+        setLastInvoice(invoice);
+        setShowSuccessModal(true);
         toast.success('تمت العملية بنجاح');
       } else {
         toast.error('فشل في إنشاء الفاتورة');
@@ -126,6 +131,21 @@ export default function POSPage() {
       toast.error('حدث خطأ أثناء معالجة الدفع');
     } finally {
       setIsProcessingPayment(false);
+    }
+  };
+
+  const handlePrintReceipt = async () => {
+    if (!lastInvoice) return;
+    setIsPrintingReceipt(true);
+    try {
+      // TODO: Replace with real Tauri invoke when Dev B implements print_receipt
+      // await printReceipt(lastInvoice.id);
+      await new Promise((resolve) => setTimeout(resolve, 800)); // Mock
+      toast.success('تم إرسال الإيصال للطباعة');
+    } catch (error) {
+      toast.error('فشل في الطباعة — يمكنك إعادة المحاولة من قائمة الفواتير');
+    } finally {
+      setIsPrintingReceipt(false);
     }
   };
 
@@ -418,6 +438,68 @@ export default function POSPage() {
             <div className="p-6 border-t border-gray-200 flex gap-3">
               <button onClick={() => setShowDiscountModal(false)} className="flex-1 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50">إلغاء</button>
               <button onClick={() => { setInvoiceDiscount(parseFloat(discountAmount) || 0); setShowDiscountModal(false); toast.success('تم تطبيق الخصم'); }} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-bold">تطبيق</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Success Modal */}
+      {showSuccessModal && lastInvoice && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-success-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle2 className="w-8 h-8 text-success-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-1">تمت العملية بنجاح!</h2>
+              <p className="text-gray-500">فاتورة رقم {lastInvoice.invoiceNumber}</p>
+            </div>
+
+            <div className="px-6 pb-4 space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">المجموع الفرعي:</span>
+                <span className="font-medium">{lastInvoice.subtotal.toFixed(2)} ر.س</span>
+              </div>
+              {lastInvoice.discount > 0 && (
+                <div className="flex justify-between text-sm text-success-600">
+                  <span>الخصم:</span>
+                  <span>-{lastInvoice.discount.toFixed(2)} ر.س</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">الضريبة:</span>
+                <span className="font-medium">{lastInvoice.vatTotal.toFixed(2)} ر.س</span>
+              </div>
+              <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
+                <span>الإجمالي:</span>
+                <span className="text-primary-700">{lastInvoice.total.toFixed(2)} ر.س</span>
+              </div>
+
+              {/* QR Placeholder */}
+              <div className="bg-gray-50 rounded-lg p-4 text-center mt-4">
+                <div className="text-sm text-gray-500 mb-2">رمز الاستجابة السريعة (ZATCA QR)</div>
+                <div className="w-32 h-32 bg-gray-200 rounded-lg mx-auto flex items-center justify-center">
+                  <span className="text-gray-400 text-xs">QR placeholder</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">سيتم إنشاء QR بواسطة Dev B</p>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 space-y-2">
+              <button
+                onClick={handlePrintReceipt}
+                disabled={isPrintingReceipt}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-bold disabled:opacity-50"
+              >
+                {isPrintingReceipt ? <Loader2 className="w-5 h-5 animate-spin" /> : <Printer className="w-5 h-5" />}
+                {isPrintingReceipt ? 'جاري الطباعة...' : 'طباعة الإيصال'}
+              </button>
+              <button
+                onClick={() => { setShowSuccessModal(false); setLastInvoice(null); }}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                بيع جديد
+              </button>
             </div>
           </div>
         </div>

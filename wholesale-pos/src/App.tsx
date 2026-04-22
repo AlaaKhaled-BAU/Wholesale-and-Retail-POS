@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage';
 import POSPage from './pages/POSPage';
 import InventoryPage from './pages/InventoryPage';
 import CustomersPage from './pages/CustomersPage';
+import InvoicesPage from './pages/InvoicesPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import AppShell from './components/layout/AppShell';
@@ -45,6 +46,7 @@ function App() {
                   <Route path="/pos" element={<POSPage />} />
                   <Route path="/inventory" element={<InventoryPage />} />
                   <Route path="/customers" element={<CustomersPage />} />
+                  <Route path="/invoices" element={<InvoicesPage />} />
                   <Route path="/reports" element={<ReportsPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="*" element={<Navigate to="/pos" replace />} />
