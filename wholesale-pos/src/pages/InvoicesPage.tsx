@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Printer, Eye, FileText, CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { Search, Printer, Eye, FileText, CheckCircle2, Clock, XCircle, CalendarDays, X } from 'lucide-react';
 import { useInvoiceStore } from '../store/useInvoiceStore';
 import { useToast } from '../hooks/useToast';
 import { cn } from '../lib/utils';
@@ -15,13 +15,23 @@ export default function InvoicesPage() {
   const toast = useToast();
   const { invoices } = useInvoiceStore();
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDate, setSelectedDate] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<typeof invoices[0] | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
 
-  const filteredInvoices = invoices.filter((inv) =>
-    inv.invoiceNumber.includes(searchQuery) ||
-    inv.customerName?.includes(searchQuery)
-  );
+  const filteredInvoices = invoices.filter((inv) => {
+    const matchesSearch =
+      inv.invoiceNumber.includes(searchQuery) ||
+      inv.customerName?.includes(searchQuery);
+
+    let matchesDate = true;
+    if (selectedDate) {
+      const invDate = new Date(inv.createdAt).toISOString().split('T')[0];
+      matchesDate = invDate === selectedDate;
+    }
+
+    return matchesSearch && matchesDate;
+  });
 
   const handlePrint = async (_invoiceId: string) => {
     setIsPrinting(true);
@@ -50,17 +60,38 @@ export default function InvoicesPage() {
         <div className="text-sm text-gray-500">{invoices.length} فاتورة</div>
       </div>
 
-      {/* Search */}
-      <div className="bg-white rounded-xl shadow-sm p-4">
-        <div className="relative">
+      {/* Search & Date Filter */}
+      <div className="bg-white rounded-xl shadow-sm p-4 flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="ابحث برقم الفاتورة أو اسم العميل..."
-            className="w-full pr-10 pl-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-right"
+            className="w-full pr-10 pl-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-right"
           />
+        </div>
+
+        <div className="relative flex items-center gap-2">
+          <div className="relative">
+            <CalendarDays className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="pr-10 pl-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-right text-sm text-gray-700"
+            />
+          </div>
+          {selectedDate && (
+            <button
+              onClick={() => setSelectedDate('')}
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+              title="إلغاء التصفية بالتاريخ"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
