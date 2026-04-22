@@ -1,0 +1,21 @@
+[package]
+name = "wholesale-pos"
+version = "0.1.0"
+description = "Wholesale Retail POS System for Saudi Arabia"
+authors = ["Dev A <frontend@example.com>", "Dev B <backend@example.com>"]
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.70"
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0", features = [] }
+tauri-plugin-shell = "2.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
