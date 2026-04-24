@@ -1,19 +1,18 @@
 use pos::Invoice;
 use pos::AppState;
+use pos::auth::{require_role, Role};
+use pos::error::PosError;
 use rusqlite::OptionalExtension;
 use tauri::State;
 
-// ============================================================
-// Task 3.3.1 — print_receipt
-// ============================================================
 #[tauri::command]
 pub fn print_receipt(
     invoice_id: String,
     state: State<AppState>,
-) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<(), PosError> {
+    let _token = require_role(&state, &[Role::Cashier])?;
+    let conn = state.db.lock()?;
 
-    // Fetch invoice
     let invoice: Invoice = conn
         .query_row(
             "SELECT i.id, i.uuid, i.branch_id, i.session_id, i.cashier_id, i.customer_id, \
@@ -50,15 +49,14 @@ pub fn print_receipt(
                 })
             },
         )
-        .map_err(|_| "الفاتورة غير موجودة".to_string())?;
+        .map_err(|_| PosError::NotFound("الفاتورة غير موجودة".to_string()).to_string())?;
 
-    // Fetch lines
     let mut lines_stmt = conn
         .prepare(
             "SELECT product_name_ar, qty, unit_price, line_total \
              FROM invoice_lines WHERE invoice_id = ?1"
         )
-        .map_err(|e| e.to_string())?;
+        ?;
 
     let lines: Vec<(String, f64, f64, f64)> = lines_stmt
         .query_map([&invoice_id], |row| {
@@ -70,46 +68,33 @@ pub fn print_receipt(
             ))
         })
         .and_then(|rows| rows.collect())
-        .map_err(|e| e.to_string())?;
+        ?;
 
-    // Fetch payments
     let mut payments_stmt = conn
         .prepare(
             "SELECT method, amount FROM payments WHERE invoice_id = ?1"
         )
-        .map_err(|e| e.to_string())?;
+        ?;
 
     let payments: Vec<(String, f64)> = payments_stmt
         .query_map([&invoice_id], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
         })
         .and_then(|rows| rows.collect())
-        .map_err(|e| e.to_string())?;
+        ?;
 
-    // Build ESC/POS commands
     let mut receipt: Vec<u8> = Vec::new();
-
-    // Initialize printer
-    receipt.extend_from_slice(&[0x1B, 0x40]); // ESC @
-
-    // Center alignment
-    receipt.extend_from_slice(&[0x1B, 0x61, 0x01]); // ESC a 1
-
-    // Store name (from settings — simplified here)
+    receipt.extend_from_slice(&[0x1B, 0x40]);
+    receipt.extend_from_slice(&[0x1B, 0x61, 0x01]);
     receipt.extend_from_slice("متجر الجملة\n".as_bytes());
     receipt.extend_from_slice("الفرع الرئيسي\n".as_bytes());
     receipt.extend_from_slice("----------------\n".as_bytes());
-
-    // Left alignment
-    receipt.extend_from_slice(&[0x1B, 0x61, 0x00]); // ESC a 0
-
-    // Invoice details
+    receipt.extend_from_slice(&[0x1B, 0x61, 0x00]);
     receipt.extend_from_slice(format!("رقم الفاتورة: {}\n", invoice.invoice_number).as_bytes());
     receipt.extend_from_slice(format!("التاريخ: {}\n", invoice.created_at).as_bytes());
     receipt.extend_from_slice(format!("الكاشير: {}\n", invoice.cashier_id).as_bytes());
     receipt.extend_from_slice("----------------\n".as_bytes());
 
-    // Lines
     for (name, qty, price, total) in lines {
         receipt.extend_from_slice(format!("{}\n", name).as_bytes());
         receipt.extend_from_slice(
@@ -118,22 +103,16 @@ pub fn print_receipt(
     }
 
     receipt.extend_from_slice("----------------\n".as_bytes());
-
-    // Totals
     receipt.extend_from_slice(format!("المجموع: {:.2}\n", invoice.subtotal).as_bytes());
     receipt.extend_from_slice(format!("الخصم: {:.2}\n", invoice.discount_amount).as_bytes());
     receipt.extend_from_slice(
         format!("ضريبة القيمة المضافة: {:.2}\n", invoice.vat_amount).as_bytes(),
     );
-
-    // Bold total
-    receipt.extend_from_slice(&[0x1B, 0x45, 0x01]); // ESC E 1 (bold on)
+    receipt.extend_from_slice(&[0x1B, 0x45, 0x01]);
     receipt.extend_from_slice(format!("الإجمالي: {:.2} ر.س\n", invoice.total).as_bytes());
-    receipt.extend_from_slice(&[0x1B, 0x45, 0x00]); // ESC E 0 (bold off)
-
+    receipt.extend_from_slice(&[0x1B, 0x45, 0x00]);
     receipt.extend_from_slice("----------------\n".as_bytes());
 
-    // Payment methods
     for (method, amount) in payments {
         let method_ar = match method.as_str() {
             "cash" => "نقدي",
@@ -144,48 +123,39 @@ pub fn print_receipt(
         receipt.extend_from_slice(format!("{}: {:.2}\n", method_ar, amount).as_bytes());
     }
 
-    // QR Code placeholder
     if invoice.qr_code.is_some() {
         receipt.extend_from_slice("----------------\n".as_bytes());
-        receipt.extend_from_slice(&[0x1B, 0x61, 0x01]); // Center
+        receipt.extend_from_slice(&[0x1B, 0x61, 0x01]);
         receipt.extend_from_slice("[QR CODE]\n".as_bytes());
-        receipt.extend_from_slice(&[0x1B, 0x61, 0x00]); // Left
+        receipt.extend_from_slice(&[0x1B, 0x61, 0x00]);
     }
 
-    // Footer
-    receipt.extend_from_slice(&[0x1B, 0x61, 0x01]); // Center
+    receipt.extend_from_slice(&[0x1B, 0x61, 0x01]);
     receipt.extend_from_slice("شكراً لزيارتكم\n".as_bytes());
-    receipt.extend_from_slice(&[0x1D, 0x56, 0x00]); // GS V 0 (cut paper)
+    receipt.extend_from_slice(&[0x1D, 0x56, 0x00]);
 
     // TODO: Implement actual printer output via serial port
-    // For now, log the bytes for testing
-    println!("Receipt bytes ({} bytes)", receipt.len());
+    eprintln!("Receipt bytes ({} bytes)", receipt.len());
 
     Ok(())
 }
 
-// ============================================================
-// Task 3.3.2 — print_test_page
-// ============================================================
 #[tauri::command]
-pub fn print_test_page() -> Result<(), String> {
+pub fn print_test_page() -> Result<(), PosError> {
     let mut receipt: Vec<u8> = Vec::new();
-    receipt.extend_from_slice(&[0x1B, 0x40]); // Initialize
-    receipt.extend_from_slice(&[0x1B, 0x61, 0x01]); // Center
+    receipt.extend_from_slice(&[0x1B, 0x40]);
+    receipt.extend_from_slice(&[0x1B, 0x61, 0x01]);
     receipt.extend_from_slice("متجر الجملة\n".as_bytes());
     receipt.extend_from_slice("اختبار الطابعة\n".as_bytes());
     receipt.extend_from_slice("Printer Test Page\n".as_bytes());
-    receipt.extend_from_slice(&[0x1D, 0x56, 0x00]); // Cut
+    receipt.extend_from_slice(&[0x1D, 0x56, 0x00]);
 
-    println!("Test page bytes ({} bytes)", receipt.len());
+    eprintln!("Test page bytes ({} bytes)", receipt.len());
     Ok(())
 }
 
-// ============================================================
-// Task 3.3.3 — get_available_ports
-// ============================================================
 #[tauri::command]
-pub fn get_available_ports() -> Result<Vec<String>, String> {
+pub fn get_available_ports() -> Result<Vec<String>, PosError> {
     #[cfg(target_os = "windows")]
     {
         let ports: Vec<String> = (1..=20).map(|i| format!("COM{}", i)).collect();
@@ -209,15 +179,13 @@ pub fn get_available_ports() -> Result<Vec<String>, String> {
     }
 }
 
-// ============================================================
-// Task 3.3.4 — get_invoice_qr
-// ============================================================
 #[tauri::command]
 pub fn get_invoice_qr(
     invoice_id: String,
     state: State<AppState>,
-) -> Result<String, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<String, PosError> {
+    let _token = require_role(&state, &[Role::Cashier])?;
+    let conn = state.db.lock()?;
 
     let qr: Option<String> = conn
         .query_row(
@@ -226,7 +194,7 @@ pub fn get_invoice_qr(
             |row| row.get(0),
         )
         .optional()
-        .map_err(|e| e.to_string())?;
+        ?;
 
     Ok(qr.unwrap_or_default())
 }

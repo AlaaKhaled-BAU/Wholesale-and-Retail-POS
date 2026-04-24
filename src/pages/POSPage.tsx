@@ -202,16 +202,30 @@ export default function POSPage() {
   const handleSearchInvoiceForRefund = async () => {
     if (!refundInvoiceNumber.trim()) return;
     setIsSearchingInvoice(true);
-    setTimeout(() => {
-      setRefundInvoice({
-        id: 'inv-123', invoiceNumber: refundInvoiceNumber,
-        lines: [
-          { productId: '1', name: 'تفاح أحمر', qty: 5, unitPrice: 15.00, selectedQty: 0 },
-          { productId: '2', name: 'موز', qty: 3, unitPrice: 8.50, selectedQty: 0 },
-        ],
-      });
+    try {
+      const invoice = await import('../lib/tauri-commands').then(m => m.getInvoice(refundInvoiceNumber.trim()));
+      if (!invoice || !invoice.lines) {
+        toast.error('الفاتورة غير موجودة');
+        setRefundInvoice(null);
+      } else {
+        setRefundInvoice({
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          lines: invoice.lines.map(l => ({
+            productId: l.productId,
+            name: l.productNameAr,
+            qty: l.qty,
+            unitPrice: l.unitPrice,
+            selectedQty: 0,
+          })),
+        });
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'فشل في البحث عن الفاتورة');
+      setRefundInvoice(null);
+    } finally {
       setIsSearchingInvoice(false);
-    }, 500);
+    }
   };
 
   const handleRefundQtyChange = (productId: string, qty: number) => {
@@ -229,9 +243,23 @@ export default function POSPage() {
     setShowRefundConfirm(true);
   };
 
-  const confirmRefund = () => {
-    toast.success('تم معالجة الإرجاع بنجاح');
-    setRefundInvoice(null); setRefundInvoiceNumber(''); setIsRefundMode(false); setShowRefundConfirm(false);
+  const confirmRefund = async () => {
+    if (!refundInvoice) return;
+    const selectedLines = refundInvoice.lines.filter((l) => l.selectedQty > 0);
+    try {
+      const { createRefundInvoice } = await import('../lib/tauri-commands');
+      await createRefundInvoice(
+        refundInvoice.id,
+        selectedLines.map(l => ({ productId: l.productId, qty: l.selectedQty }))
+      );
+      toast.success('تم معالجة الإرجاع بنجاح');
+      setRefundInvoice(null);
+      setRefundInvoiceNumber('');
+      setIsRefundMode(false);
+      setShowRefundConfirm(false);
+    } catch (err: any) {
+      toast.error(err?.message || 'فشل في معالجة الإرجاع');
+    }
   };
 
   return (

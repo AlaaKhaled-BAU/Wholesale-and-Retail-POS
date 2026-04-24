@@ -1,5 +1,7 @@
 use pos::InventoryItem;
 use pos::AppState;
+use pos::auth::{require_role, require_session, Role};
+use pos::error::PosError;
 use rusqlite::OptionalExtension;
 use rusqlite::params;
 use tauri::State;
@@ -25,8 +27,9 @@ fn map_inventory_row(row: &rusqlite::Row) -> Result<InventoryItem, rusqlite::Err
 pub fn get_inventory(
     branch_id: String,
     state: State<AppState>,
-) -> Result<Vec<InventoryItem>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<Vec<InventoryItem>, PosError> {
+    let _token = require_role(&state, &[Role::Manager])?;
+    let conn = state.db.lock()?;
 
     let mut stmt = conn
         .prepare(
@@ -40,13 +43,11 @@ pub fn get_inventory(
              JOIN products p ON p.id = i.product_id \
              WHERE i.branch_id = ?1 \
              ORDER BY p.name_ar"
-        )
-        .map_err(|e| e.to_string())?;
+        )?;
 
     let items = stmt
         .query_map(params![&branch_id], map_inventory_row)
-        .and_then(|rows| rows.collect())
-        .map_err(|e| e.to_string())?;
+        .and_then(|rows| rows.collect())?;
 
     Ok(items)
 }
@@ -59,8 +60,21 @@ pub fn adjust_inventory(
     reason: String,
     user_id: String,
     state: State<AppState>,
-) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<(), PosError> {
+    let _token = require_role(&state, &[Role::Manager])?;
+
+    // Validate user_id matches session
+    let current = require_session(&state)?;
+    if current.user_id != user_id {
+        return Err(PosError::Unauthorized);
+    }
+
+    // Validation: no negative quantities
+    if new_qty < 0.0 {
+        return Err(PosError::ValidationError("الكمية لا يمكن أن تكون سالبة".to_string()));
+    }
+
+    let conn = state.db.lock()?;
 
     // Get old quantity
     let old_qty: f64 = conn
@@ -75,8 +89,7 @@ pub fn adjust_inventory(
         "UPDATE inventory SET qty_on_hand = ?1, last_updated = datetime('now') \
          WHERE branch_id = ?2 AND product_id = ?3",
         params![&new_qty, &branch_id, &product_id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     // Audit log
     conn.execute(
@@ -91,8 +104,7 @@ pub fn adjust_inventory(
                 old_qty, new_qty, reason
             ),
         ],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     Ok(())
 }
@@ -102,8 +114,9 @@ pub fn get_inventory_by_product(
     branch_id: String,
     product_id: String,
     state: State<AppState>,
-) -> Result<Option<InventoryItem>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<Option<InventoryItem>, PosError> {
+    let _token = require_role(&state, &[Role::Cashier])?;
+    let conn = state.db.lock()?;
 
     let item = conn
         .query_row(
@@ -119,8 +132,7 @@ pub fn get_inventory_by_product(
             params![&branch_id, &product_id],
             map_inventory_row,
         )
-        .optional()
-        .map_err(|e| e.to_string())?;
+        .optional()?;
 
     Ok(item)
 }

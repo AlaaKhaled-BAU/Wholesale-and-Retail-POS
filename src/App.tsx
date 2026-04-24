@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { useAuthStore } from './store/useAuthStore';
 import { useIdleTimer } from './hooks/useIdleTimer';
 import { useToast } from './hooks/useToast';
@@ -9,17 +10,24 @@ import CustomersPage from './pages/CustomersPage';
 import InvoicesPage from './pages/InvoicesPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
+import FirstRunSetupPage from './pages/FirstRunSetupPage';
 import AppShell from './components/layout/AppShell';
 import RouteGuard from './components/layout/RouteGuard';
 import ToastContainer from './components/common/ToastContainer';
+import { isFirstRun } from './lib/tauri-commands';
 
 function App() {
   const { isAuthenticated, lockScreen } = useAuthStore();
   const toast = useToast();
+  const [firstRun, setFirstRun] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    isFirstRun().then(setFirstRun).catch(() => setFirstRun(false));
+  }, []);
 
   // Auto-lock after 5 minutes of inactivity
   useIdleTimer({
-    timeout: 300_000, // 5 minutes
+    timeout: 300_000,
     onIdle: () => {
       if (isAuthenticated) {
         lockScreen();
@@ -28,6 +36,23 @@ function App() {
     },
     enabled: isAuthenticated,
   });
+
+  if (firstRun === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" dir="rtl">
+        <div className="text-gray-500">جاري التحميل...</div>
+      </div>
+    );
+  }
+
+  if (firstRun) {
+    return (
+      <>
+        <ToastContainer />
+        <FirstRunSetupPage />
+      </>
+    );
+  }
 
   return (
     <BrowserRouter>

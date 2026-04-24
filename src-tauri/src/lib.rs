@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+pub mod auth;
+pub mod error;
+pub mod secret_store;
+
 // ============================================================
 // Core entities — must match TypeScript interfaces exactly
 // ============================================================
@@ -322,6 +326,7 @@ pub struct AppSettings {
 // Application state (managed by Tauri)
 pub struct AppState {
     pub db: std::sync::Mutex<rusqlite::Connection>,
-    pub current_session: std::sync::Mutex<Option<CashierSession>>,
+    pub current_session: std::sync::Mutex<Option<SessionToken>>,
     pub settings: std::sync::Mutex<Option<AppSettings>>,
+    pub rate_limiter: crate::auth::RateLimiter,
 }

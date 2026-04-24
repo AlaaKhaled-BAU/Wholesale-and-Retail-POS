@@ -1,5 +1,7 @@
 use pos::{Invoice, InvoiceLine, NewInvoice, Payment, RefundLine};
 use pos::AppState;
+use pos::auth::{require_role, Role};
+use pos::error::PosError;
 use rusqlite::OptionalExtension;
 use rusqlite::params;
 use tauri::State;
@@ -57,48 +59,40 @@ fn map_payment_row(row: &rusqlite::Row) -> Result<Payment, rusqlite::Error> {
     })
 }
 
-// ============================================================
-// Task 3.1.1 — create_invoice (atomic transaction)
-// ============================================================
 #[tauri::command]
 pub fn create_invoice(
     payload: NewInvoice,
     state: State<AppState>,
-) -> Result<Invoice, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<Invoice, PosError> {
+    let token = require_role(&state, &[Role::Cashier])?;
+
+    // Validate that cashier_id matches the current session
+    if payload.cashier_id != token.user_id {
+        return Err(PosError::Unauthorized);
+    }
+
+    let conn = state.db.lock()?;
 
     // Step 1: Begin transaction
     conn.execute("BEGIN", [])
-        .map_err(|e| e.to_string())?;
+        ?;
 
     let result = (|| -> Result<String, rusqlite::Error> {
         // Step 2: Generate invoice UUID
         let invoice_uuid = Uuid::new_v4().to_string();
 
-        // Step 3: Generate invoice number
-        let max_num: Option<String> = conn
-            .query_row(
-                "SELECT invoice_number FROM invoices WHERE branch_id = ?1 ORDER BY created_at DESC LIMIT 1",
-                [&payload.branch_id],
-                |row| row.get(0),
-            )
-            .optional()?;
-
-        let next_counter = match max_num {
-            Some(num) => {
-                let parts: Vec<&str> = num.split('-').collect();
-                if parts.len() == 2 {
-                    parts[1].parse::<i64>().unwrap_or(0) + 1
-                } else {
-                    1
-                }
-            }
-            None => 1,
-        };
+        // Step 3: Generate invoice number atomically
+        let next_counter: i64 = conn.query_row(
+            "INSERT INTO invoice_counters (branch_id, last_number) VALUES (?1, 1) \
+             ON CONFLICT(branch_id) DO UPDATE SET last_number = last_number + 1 \
+             RETURNING last_number",
+            [&payload.branch_id],
+            |row| row.get(0),
+        )?;
 
         let invoice_number = format!("{}-{:06}", payload.branch_prefix, next_counter);
 
-        // Step 4: Validate open session (Gap G4 fix)
+        // Step 4: Validate open session
         let session_check: Option<String> = conn
             .query_row(
                 "SELECT id FROM cashier_sessions WHERE id = ?1 AND status = 'open'",
@@ -113,7 +107,55 @@ pub fn create_invoice(
             ));
         }
 
-        // Step 5: Determine payment method summary
+        // Step 5: Server-side total recalculation + stock guard
+        let mut calculated_subtotal = 0.0;
+        let mut calculated_vat = 0.0;
+        let mut calculated_total = 0.0;
+
+        for line in &payload.lines {
+            if line.qty <= 0.0 {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "الكمية يجب أن تكون أكبر من صفر".to_string(),
+                ));
+            }
+            if line.unit_price < 0.0 {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "السعر لا يمكن أن يكون سالباً".to_string(),
+                ));
+            }
+
+            let base = line.unit_price * line.qty * (1.0 - line.discount_pct / 100.0);
+            let vat = base * line.vat_rate;
+            let line_total = base + vat;
+            calculated_subtotal += base;
+            calculated_vat += vat;
+            calculated_total += line_total;
+
+            // Stock guard: check available quantity
+            let stock: f64 = conn.query_row(
+                "SELECT qty_on_hand FROM inventory WHERE branch_id = ?1 AND product_id = ?2",
+                params![&payload.branch_id, &line.product_id],
+                |row| row.get(0),
+            ).unwrap_or(0.0);
+
+            if stock < line.qty {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    format!("الكمية غير متوفرة للمنتج {}", line.product_name_ar),
+                ));
+            }
+        }
+
+        // Verify frontend totals (allow 0.01 rounding tolerance)
+        if (payload.subtotal - calculated_subtotal).abs() > 0.01
+            || (payload.vat_amount - calculated_vat).abs() > 0.01
+            || (payload.total - calculated_total).abs() > 0.01
+        {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "المجاميع غير متطابقة".to_string(),
+            ));
+        }
+
+        // Step 6: Determine payment method summary
         let payment_method = if payload.payments.len() == 1 {
             payload.payments[0].method.clone()
         } else {
@@ -122,7 +164,7 @@ pub fn create_invoice(
 
         let invoice_id = format!("INV-{}", invoice_uuid);
 
-        // Step 6: Insert invoice header
+        // Step 7: Insert invoice header
         conn.execute(
             "INSERT INTO invoices (id, uuid, branch_id, session_id, cashier_id, customer_id, invoice_number, invoice_type, status, subtotal, discount_amount, vat_amount, total, payment_method, notes) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'confirmed', ?9, ?10, ?11, ?12, ?13, ?14)",
@@ -144,7 +186,7 @@ pub fn create_invoice(
             ],
         )?;
 
-        // Step 7: Insert invoice lines
+        // Step 8: Insert invoice lines
         for line in &payload.lines {
             conn.execute(
                 "INSERT INTO invoice_lines (id, invoice_id, product_id, product_name_ar, qty, unit_price, discount_pct, vat_rate, vat_amount, line_total) \
@@ -164,8 +206,13 @@ pub fn create_invoice(
             )?;
         }
 
-        // Step 8: Insert payments
+        // Step 9: Insert payments
         for payment in &payload.payments {
+            if payment.amount < 0.0 {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "مبلغ الدفع لا يمكن أن يكون سالباً".to_string(),
+                ));
+            }
             conn.execute(
                 "INSERT INTO payments (id, invoice_id, method, amount, reference) \
                  VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -179,7 +226,7 @@ pub fn create_invoice(
             )?;
         }
 
-        // Step 9: Decrement inventory
+        // Step 10: Decrement inventory
         for line in &payload.lines {
             conn.execute(
                 "UPDATE inventory SET qty_on_hand = qty_on_hand - ?1, last_updated = datetime('now') \
@@ -188,7 +235,7 @@ pub fn create_invoice(
             )?;
         }
 
-        // Step 10: Write audit log
+        // Step 11: Write audit log
         conn.execute(
             "INSERT INTO audit_log (id, action, entity_type, entity_id, user_id, payload) \
              VALUES (?1, 'invoice_created', 'invoice', ?2, ?3, ?4)",
@@ -209,7 +256,7 @@ pub fn create_invoice(
     match result {
         Ok(invoice_id) => {
             conn.execute("COMMIT", [])
-                .map_err(|e| e.to_string())?;
+                ?;
 
             // Generate ZATCA QR code (non-blocking; errors don't fail the sale)
             let _ = crate::commands::zatca::generate_and_store_invoice_qr(&invoice_id, &conn);
@@ -219,7 +266,7 @@ pub fn create_invoice(
         }
         Err(e) => {
             let _ = conn.execute("ROLLBACK", []);
-            Err(e.to_string())
+            Err(PosError::from(e))
         }
     }
 }
@@ -227,7 +274,7 @@ pub fn create_invoice(
 fn get_invoice_internal(
     invoice_id: &str,
     conn: &rusqlite::Connection,
-) -> Result<Invoice, String> {
+) -> Result<Invoice, PosError> {
     let mut invoice: Invoice = conn
         .query_row(
             "SELECT i.id, i.uuid, i.branch_id, i.session_id, i.cashier_id, i.customer_id, \
@@ -240,33 +287,31 @@ fn get_invoice_internal(
             [invoice_id],
             map_invoice_row,
         )
-        .map_err(|e| e.to_string())?;
+        ?;
 
-    // Fetch lines
     let mut lines_stmt = conn
         .prepare(
             "SELECT id, invoice_id, product_id, product_name_ar, qty, unit_price, discount_pct, vat_rate, vat_amount, line_total \
              FROM invoice_lines WHERE invoice_id = ?1"
         )
-        .map_err(|e| e.to_string())?;
+        ?;
 
     let lines: Vec<InvoiceLine> = lines_stmt
         .query_map([invoice_id], map_line_row)
         .and_then(|rows| rows.collect())
-        .map_err(|e| e.to_string())?;
+        ?;
 
-    // Fetch payments
     let mut payments_stmt = conn
         .prepare(
             "SELECT id, invoice_id, method, amount, reference, paid_at \
              FROM payments WHERE invoice_id = ?1"
         )
-        .map_err(|e| e.to_string())?;
+        ?;
 
     let payments: Vec<Payment> = payments_stmt
         .query_map([invoice_id], map_payment_row)
         .and_then(|rows| rows.collect())
-        .map_err(|e| e.to_string())?;
+        ?;
 
     invoice.lines = Some(lines);
     invoice.payments = Some(payments);
@@ -274,27 +319,23 @@ fn get_invoice_internal(
     Ok(invoice)
 }
 
-// ============================================================
-// Task 3.2.1 — get_invoice
-// ============================================================
 #[tauri::command]
 pub fn get_invoice(
     invoice_id: String,
     state: State<AppState>,
-) -> Result<Invoice, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<Invoice, PosError> {
+    let _token = require_role(&state, &[Role::Cashier])?;
+    let conn = state.db.lock()?;
     get_invoice_internal(&invoice_id, &conn)
 }
 
-// ============================================================
-// Task 3.2.2 — get_invoice_by_number
-// ============================================================
 #[tauri::command]
 pub fn get_invoice_by_number(
     invoice_number: String,
     state: State<AppState>,
-) -> Result<Option<Invoice>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<Option<Invoice>, PosError> {
+    let _token = require_role(&state, &[Role::Cashier])?;
+    let conn = state.db.lock()?;
 
     let invoice_id: Option<String> = conn
         .query_row(
@@ -303,7 +344,7 @@ pub fn get_invoice_by_number(
             |row| row.get(0),
         )
         .optional()
-        .map_err(|e| e.to_string())?;
+        ?;
 
     match invoice_id {
         Some(id) => {
@@ -314,25 +355,24 @@ pub fn get_invoice_by_number(
     }
 }
 
-// ============================================================
-// Task 3.2.3 — create_refund_invoice
-// ============================================================
 #[tauri::command]
 pub fn create_refund_invoice(
     original_invoice_id: String,
     lines: Vec<RefundLine>,
     state: State<AppState>,
-) -> Result<Invoice, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<Invoice, PosError> {
+    let token = require_role(&state, &[Role::Cashier])?;
+
+    let conn = state.db.lock()?;
 
     conn.execute("BEGIN", [])
-        .map_err(|e| e.to_string())?;
+        ?;
 
     let result = (|| -> Result<String, rusqlite::Error> {
         // Get original invoice
         let original = conn
             .query_row(
-                "SELECT branch_id, session_id, cashier_id, customer_id \
+                "SELECT branch_id, session_id, cashier_id, customer_id, total \
                  FROM invoices WHERE id = ?1",
                 [&original_invoice_id],
                 |row| {
@@ -341,6 +381,7 @@ pub fn create_refund_invoice(
                         row.get::<_, String>(1)?,
                         row.get::<_, String>(2)?,
                         row.get::<_, Option<String>>(3)?,
+                        row.get::<_, f64>(4)?,
                     ))
                 },
             )
@@ -351,18 +392,19 @@ pub fn create_refund_invoice(
                 )
             })?;
 
-        let (branch_id, session_id, cashier_id, customer_id) = original;
+        let (branch_id, session_id, cashier_id, customer_id, original_total) = original;
 
-        let refund_uuid = Uuid::new_v4().to_string();
-        let refund_id = format!("INV-{}", refund_uuid);
-        let refund_number = format!("REF-{}", refund_uuid.split('-').next().unwrap_or("000"));
-
-        // Calculate totals
+        // Calculate refund totals
         let mut subtotal = 0.0;
         let mut vat_amount = 0.0;
         let mut total = 0.0;
 
         for line in &lines {
+            if line.qty <= 0.0 {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "الكمية يجب أن تكون أكبر من صفر".to_string(),
+                ));
+            }
             let base = line.unit_price * line.qty;
             let vat = base * line.vat_rate;
             let line_total = base + vat;
@@ -370,6 +412,24 @@ pub fn create_refund_invoice(
             vat_amount += vat;
             total += line_total;
         }
+
+        // Authorization: cashier can only refund < 100 SAR; manager+ can refund any amount
+        if token.role == "cashier" && total.abs() >= 100.0 {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "يتطلب الإرجاع بقيمة 100 ر.س أو أكثر إذن المدير".to_string(),
+            ));
+        }
+
+        // Cap refund to original invoice total
+        if total.abs() > original_total.abs() + 0.01 {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "مبلغ الإرجاع يتجاوز إجمالي الفاتورة الأصلية".to_string(),
+            ));
+        }
+
+        let refund_uuid = Uuid::new_v4().to_string();
+        let refund_id = format!("INV-{}", refund_uuid);
+        let refund_number = format!("REF-{}", refund_uuid.split('-').next().unwrap_or("000"));
 
         // Insert refund invoice header (negative amounts)
         conn.execute(
@@ -440,12 +500,12 @@ pub fn create_refund_invoice(
     match result {
         Ok(refund_id) => {
             conn.execute("COMMIT", [])
-                .map_err(|e| e.to_string())?;
+                ?;
             get_invoice_internal(&refund_id, &conn)
         }
         Err(e) => {
             let _ = conn.execute("ROLLBACK", []);
-            Err(e.to_string())
+            Err(PosError::from(e))
         }
     }
 }

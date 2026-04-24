@@ -1,15 +1,3 @@
-// ============================================================
-// Tauri Command Wrappers — Backend-Frontend Compatibility Layer
-// ============================================================
-// This file bridges Dev A's frontend with Dev B's backend.
-// All invoke() calls go through here.
-//
-// Strategy:
-// 1. Expose same function signatures Dev A expects
-// 2. Internally call backend commands with correct params
-// 3. Transform responses to match Dev A's expected shapes
-// ============================================================
-
 import { invoke } from '@tauri-apps/api/core';
 import type {
   Product,
@@ -68,7 +56,6 @@ export const getCurrentSession = (userId: string) =>
 // Products
 // ============================================================
 
-// Default branchId for single-branch MVP
 const DEFAULT_BRANCH_ID = 'BR1';
 
 export const getProducts = (query?: string, categoryId?: string, _page = 1) =>
@@ -157,7 +144,7 @@ export const updateCustomer = (id: string, customer: CustomerInput) => {
   return invoke<Customer>('update_customer', { id, data: payload });
 };
 
-export const addCustomerPayment = (customerId: string, amount: number, userId = 'USR-002') =>
+export const addCustomerPayment = (customerId: string, amount: number, userId: string) =>
   invoke<void>('record_customer_payment', { customerId, amount, userId });
 
 export const getCustomerInvoices = (customerId: string) =>
@@ -198,19 +185,32 @@ function paymentDetailsToPayments(details: CartData['paymentDetails'], grandTota
   if (details.cliqReference) {
     payments.push({ method: 'cliq', amount: grandTotal, reference: details.cliqReference });
   }
-  // Fallback: if no payments specified, assume cash for full amount
   if (payments.length === 0) {
     payments.push({ method: 'cash', amount: grandTotal });
   }
   return payments;
 }
 
-export const createInvoice = async (cartData: CartData): Promise<Invoice> => {
-  // Get current session from localStorage or auth store
+function getSessionFromStorage(): { sessionId: string; userId: string } | null {
   const sessionJson = localStorage.getItem('pos-session');
-  const session = sessionJson ? JSON.parse(sessionJson) : null;
-  const sessionId = session?.sessionId || 'SES-002';
-  const cashierId = session?.user?.id || 'USR-002';
+  if (!sessionJson) return null;
+  try {
+    const session = JSON.parse(sessionJson);
+    if (!session?.sessionId || !session?.user?.id) return null;
+    return {
+      sessionId: session.sessionId,
+      userId: session.user.id,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export const createInvoice = async (cartData: CartData): Promise<Invoice> => {
+  const session = getSessionFromStorage();
+  if (!session) {
+    throw new Error('لا يوجد جلسة نشطة');
+  }
 
   const lines = cartData.items.map(cartItemToNewLine);
   const payments = paymentDetailsToPayments(cartData.paymentDetails, cartData.grandTotal);
@@ -218,8 +218,8 @@ export const createInvoice = async (cartData: CartData): Promise<Invoice> => {
   const payload: NewInvoice = {
     branchId: DEFAULT_BRANCH_ID,
     branchPrefix: 'BR1',
-    cashierId,
-    sessionId,
+    cashierId: session.userId,
+    sessionId: session.sessionId,
     customerId: cartData.customerId || undefined,
     invoiceType: 'simplified',
     lines,
@@ -233,14 +233,12 @@ export const createInvoice = async (cartData: CartData): Promise<Invoice> => {
   return invoke<Invoice>('create_invoice', { payload });
 };
 
-export const createRefundInvoice = (originalInvoiceId: string, lines: { productId: string; qty: number }[]) => {
-  // Need to fetch original invoice to get product details
-  // For now, simplified — frontend should provide full refund lines
+export const createRefundInvoice = async (originalInvoiceId: string, lines: { productId: string; qty: number }[]) => {
   const refundLines: RefundLine[] = lines.map(l => ({
     productId: l.productId,
-    productNameAr: '', // Will be filled by backend
+    productNameAr: '',
     qty: l.qty,
-    unitPrice: 0, // Will be filled by backend
+    unitPrice: 0,
     vatRate: 0.15,
   }));
   return invoke<Invoice>('create_refund_invoice', { originalInvoiceId, lines: refundLines });
@@ -279,7 +277,6 @@ export const getSettings = () =>
   invoke<AppSettings>('get_all_settings');
 
 export const updateSettings = (settings: Partial<AppSettings>) => {
-  // Update each changed setting individually
   const promises: Promise<void>[] = [];
   Object.entries(settings).forEach(([key, value]) => {
     if (value !== undefined) {
@@ -294,6 +291,22 @@ export const getSetting = (key: string) =>
 
 export const setSetting = (key: string, value: string) =>
   invoke<void>('set_setting', { key, value });
+
+export const isFirstRun = () =>
+  invoke<boolean>('is_first_run');
+
+export const completeSetup = (payload: {
+  branchNameAr: string;
+  vatNumber: string;
+  crNumber: string;
+  address: string;
+  adminName: string;
+  adminPin: string;
+  branchPrefix: string;
+}) => invoke<void>('complete_setup', { payload });
+
+export const backupDatabase = () =>
+  invoke<string>('backup_database');
 
 // ============================================================
 // Printer
@@ -313,7 +326,7 @@ export const getAvailablePorts = () =>
 // ============================================================
 
 export const checkScannerConnected = () =>
-  Promise.resolve({ connected: false }); // No hardware check in MVP
+  Promise.resolve({ connected: false });
 
 // ============================================================
 // ZATCA

@@ -428,6 +428,63 @@ To be completed at the end of Phase 8 before the demo.
 - Surfaced real backend errors in `useAuthStore` to prevent silent failures.
 - Verified everything with `cargo check` and manual UI inspection.
 
+### April 24, 2026 — Security Sprint — Access Control & Hardening (Tasks A.1–A.6)
+**Owner**: Dev B
+**Duration**: 1 day
+**Deliverable achieved**: Yes
+**Notes**:
+- **A.1**: Enabled restrictive CSP in `tauri.conf.json`: `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';`
+- **A.2**: Restricted Tauri capabilities in `capabilities/default.json`: removed `shell:default` and `sql:default`, kept only `core:default` + window controls.
+- **A.3**: Created `src-tauri/src/auth.rs` with RBAC middleware (`require_role`, `require_session`, `require_session_or_user_id`) and `RateLimiter` struct for PIN brute-force protection.
+- **A.4**: Enforced RBAC on all 40+ commands: Admin-only for `create_product`, `register_zatca_device`, `seed_demo_data`, etc.; Manager+ for `adjust_inventory`, `export_invoices_csv`, etc.; Cashier+ for sales operations.
+- **A.5**: Added backend rate limiter in `login_user`: 5 failed attempts → 5-minute lock with Arabic error messages. Lock state is per-user in-memory.
+- **A.6**: Removed hardcoded fallback user IDs (`USR-002`) from `src/lib/tauri-commands.ts`. `createInvoice` and `addCustomerPayment` now fail hard if no valid session exists in `localStorage`.
+- Changed `AppState.current_session` from `CashierSession` to `SessionToken` to support RBAC checks across all commands.
+
+### April 24, 2026 — Security Sprint — Secrets & Data Protection (Tasks B.1–B.4)
+**Owner**: Dev B
+**Duration**: 1 day
+**Deliverable achieved**: Yes
+**Notes**:
+- **B.1**: Built first-run wizard: backend commands `is_first_run()` and `complete_setup(payload)` in `settings.rs`; frontend `FirstRunSetupPage.tsx` with 2-step form (branch info + admin PIN). Setup creates branch, admin user, default settings, and one category.
+- **B.2**: Gated `seed_if_empty` behind `#[cfg(debug_assertions)]`. In release builds, the app starts with no users and forces the first-run wizard. Hardcoded seed users (`0000`/`1234`) are now debug-only.
+- **B.3 + B.4**: Migrated ZATCA private key and CSID/secret from plaintext SQLite `settings` table to OS-level secure storage via `keyring` crate (Windows Credential Manager / Linux secret-service). Added fallback to restricted-permissions file (`0600`) if keyring is unavailable. Created `src-tauri/src/secret_store.rs` abstraction layer.
+- Added `tauri-plugin-stronghold` initialization in `main.rs` for future secret storage expansion.
+
+### April 24, 2026 — Security Sprint — Input Validation & Data Integrity (Tasks C.1–C.7)
+**Owner**: Dev B
+**Duration**: 1 day
+**Deliverable achieved**: Yes
+**Notes**:
+- **C.1**: Added server-side invoice total recalculation in `create_invoice`: recalculates subtotal, VAT, and total from lines; rejects if frontend-provided totals differ by > 0.01.
+- **C.2**: Added SQLite CHECK constraints in `schema.sql`: `sell_price >= 0`, `cost_price >= 0`, `qty > 0`, `qty_on_hand >= 0`, `amount >= 0`, `subtotal/vat/total >= 0`, `discount_pct <= 100`.
+- **C.3**: Fixed invoice numbering race condition: replaced `MAX(invoice_number)` query with atomic `INSERT INTO invoice_counters ... ON CONFLICT DO UPDATE SET last_number = last_number + 1 RETURNING last_number`.
+- **C.4**: Added stock guard in `create_invoice`: queries `qty_on_hand` before decrement; returns Arabic error "الكمية غير متوفرة" if insufficient stock; transaction rolls back.
+- **C.5**: Fixed `close_cashier_session` ownership: validates that `AppState.current_session.user_id` matches both the `user_id` parameter and the session owner in DB. Cashiers cannot close other cashiers' sessions.
+- **C.6**: Enabled WAL mode in `main.rs`: `PRAGMA journal_mode = WAL` + `PRAGMA synchronous = NORMAL`.
+- **C.7**: Added daily database backup scheduler in `main.rs`: runs at 02:00 every day via background task; uses `VACUUM INTO`; retains last 7 backups; deletes older ones. Added `backup_database` command for manual backup.
+
+### April 24, 2026 — Security Sprint — Resilience & Refund Wiring (Tasks D.2–D.3)
+**Owner**: Dev B
+**Duration**: 0.5 day
+**Deliverable achieved**: Yes
+**Notes**:
+- **D.2**: Added panic recovery to ZATCA background retry task: wrapped `process_zatca_retry_queue` in `tokio::task::spawn`; if the task panics, the error is logged to stderr and the loop continues after the 10-minute sleep interval.
+- **D.3**: Wired up real refund flow with authorization:
+  - Frontend `POSPage.tsx`: `handleSearchInvoiceForRefund` now calls `getInvoice` backend command to fetch real invoice data; `confirmRefund` calls `createRefundInvoice` backend command.
+  - Backend `create_refund_invoice`: Cashiers can refund < 100 SAR without manager approval; Manager+ can refund any amount. Refund total is capped to original invoice total. Restocks inventory atomically.
+- Fixed all `base64::encode`/`base64::decode` deprecation warnings in `zatca.rs` by using `base64::engine::general_purpose::STANDARD`.
+- **D.1**: Implemented typed `PosError` enum and replaced `Result<T, String>` across all 40+ commands:
+  - Created `src-tauri/src/error.rs` with `PosError` variants: `DatabaseError`, `AuthenticationError`, `InvalidCredentials`, `AccountLocked(String)`, `SessionExpired`, `Unauthorized`, `ValidationError(String)`, `NotFound(String)`, `BusinessRule(String)`, `InternalError`.
+  - Implemented `Display`, `Serialize`, and `std::error::Error` for structured JSON error responses.
+  - Added `From` conversions for `rusqlite::Error`, `bcrypt::BcryptError`, `reqwest::Error`, `quick_xml::Error`, `image::ImageError`, `qrcode::QrError`, `ring::error::Unspecified`, `base64::DecodeError`, `std::io::Error`, `keyring::Error`, and mutex poison errors.
+  - Updated all command files (`users.rs`, `products.rs`, `inventory.rs`, `customers.rs`, `invoices.rs`, `reports.rs`, `settings.rs`, `printing.rs`, `zatca.rs`) to return `Result<T, PosError>`.
+  - Removed all `.map_err(|e| e.to_string())` patterns; errors now flow through typed conversions.
+  - Custom Arabic messages preserved via `PosError::NotFound`, `ValidationError`, `BusinessRule` variants.
+- **D.4**: Ran `cargo clippy -- -D warnings` and fixed all issues: added `Default` impl for `RateLimiter`, simplified rate limiter check with `?` operator, removed explicit auto-deref in ZATCA background task.
+- `cargo check` passes cleanly. `cargo clippy -- -D warnings` passes with zero errors.
+- **Security sprint is now 100% complete. All P0 and P1 items from the audit have been addressed.**
+
 ---
 
 ## Upcoming Milestones

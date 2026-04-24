@@ -3,21 +3,20 @@ use pos::{
     SessionReport, TopProduct,
 };
 use pos::AppState;
+use pos::auth::{require_role, Role};
+use pos::error::PosError;
 use rusqlite::params;
 use tauri::State;
 
-// ============================================================
-// Task 5.1.1 — get_daily_summary
-// ============================================================
 #[tauri::command]
 pub fn get_daily_summary(
     branch_id: String,
     date: String,
     state: State<AppState>,
-) -> Result<DailySummary, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<DailySummary, PosError> {
+    let _token = require_role(&state, &[Role::Manager])?;
+    let conn = state.db.lock()?;
 
-    // Main KPIs
     let (invoice_count, total_sales, total_vat, grand_total): (i64, f64, f64, f64) = conn
         .query_row(
             "SELECT COUNT(*), COALESCE(SUM(subtotal), 0), COALESCE(SUM(vat_amount), 0), COALESCE(SUM(total), 0) \
@@ -27,7 +26,6 @@ pub fn get_daily_summary(
         )
         .unwrap_or((0, 0.0, 0.0, 0.0));
 
-    // Payment method breakdown
     let cash: f64 = conn
         .query_row(
             "SELECT COALESCE(SUM(p.amount), 0) FROM payments p \
@@ -58,7 +56,6 @@ pub fn get_daily_summary(
         )
         .unwrap_or(0.0);
 
-    // Top 5 products
     let mut stmt = conn
         .prepare(
             "SELECT il.product_name_ar, SUM(il.qty) as qty_sold, SUM(il.line_total) as revenue \
@@ -68,7 +65,7 @@ pub fn get_daily_summary(
              GROUP BY il.product_id \
              ORDER BY qty_sold DESC LIMIT 5",
         )
-        .map_err(|e| e.to_string())?;
+        ?;
 
     let top_products: Vec<TopProduct> = stmt
         .query_map(params![&branch_id, &date], |row| {
@@ -79,7 +76,7 @@ pub fn get_daily_summary(
             })
         })
         .and_then(|rows| rows.collect())
-        .map_err(|e| e.to_string())?;
+        ?;
 
     Ok(DailySummary {
         date,
@@ -92,17 +89,15 @@ pub fn get_daily_summary(
     })
 }
 
-// ============================================================
-// Task 5.1.2 — get_sales_by_period
-// ============================================================
 #[tauri::command]
 pub fn get_sales_by_period(
     branch_id: String,
     from_date: String,
     to_date: String,
     state: State<AppState>,
-) -> Result<Vec<DailySales>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<Vec<DailySales>, PosError> {
+    let _token = require_role(&state, &[Role::Manager])?;
+    let conn = state.db.lock()?;
 
     let mut stmt = conn
         .prepare(
@@ -113,7 +108,7 @@ pub fn get_sales_by_period(
              GROUP BY DATE(created_at) \
              ORDER BY sale_date",
         )
-        .map_err(|e| e.to_string())?;
+        ?;
 
     let sales: Vec<DailySales> = stmt
         .query_map(params![&branch_id, &from_date, &to_date], |row| {
@@ -125,20 +120,18 @@ pub fn get_sales_by_period(
             })
         })
         .and_then(|rows| rows.collect())
-        .map_err(|e| e.to_string())?;
+        ?;
 
     Ok(sales)
 }
 
-// ============================================================
-// Task 5.1.3 — get_inventory_report
-// ============================================================
 #[tauri::command]
 pub fn get_inventory_report(
     branch_id: String,
     state: State<AppState>,
-) -> Result<Vec<InventoryReportRow>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<Vec<InventoryReportRow>, PosError> {
+    let _token = require_role(&state, &[Role::Manager])?;
+    let conn = state.db.lock()?;
 
     let mut stmt = conn
         .prepare(
@@ -150,7 +143,7 @@ pub fn get_inventory_report(
              WHERE i.branch_id = ?1 \
              ORDER BY is_low_stock DESC, p.name_ar",
         )
-        .map_err(|e| e.to_string())?;
+        ?;
 
     let rows: Vec<InventoryReportRow> = stmt
         .query_map(params![&branch_id], |row| {
@@ -165,20 +158,18 @@ pub fn get_inventory_report(
             })
         })
         .and_then(|rows| rows.collect())
-        .map_err(|e| e.to_string())?;
+        ?;
 
     Ok(rows)
 }
 
-// ============================================================
-// Task 5.1.4 — get_cashier_session_report
-// ============================================================
 #[tauri::command]
 pub fn get_cashier_session_report(
     session_id: String,
     state: State<AppState>,
-) -> Result<SessionReport, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<SessionReport, PosError> {
+    let token = require_role(&state, &[Role::Cashier])?;
+    let conn = state.db.lock()?;
 
     let session: CashierSession = conn
         .query_row(
@@ -198,7 +189,12 @@ pub fn get_cashier_session_report(
                 })
             },
         )
-        .map_err(|_| "المناوبة غير موجودة".to_string())?;
+        .map_err(|_| PosError::NotFound("المناوبة غير موجودة".to_string()).to_string())?;
+
+    // Cashiers can only view their own session reports; managers can view any
+    if token.role == "cashier" && session.user_id != token.user_id {
+        return Err(PosError::Unauthorized);
+    }
 
     let (invoice_count, total_sales): (i64, f64) = conn
         .query_row(
@@ -255,17 +251,15 @@ pub fn get_cashier_session_report(
     })
 }
 
-// ============================================================
-// Task 5.1.5 — export_invoices_csv
-// ============================================================
 #[tauri::command]
 pub fn export_invoices_csv(
     branch_id: String,
     from_date: String,
     to_date: String,
     state: State<AppState>,
-) -> Result<String, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<String, PosError> {
+    let _token = require_role(&state, &[Role::Manager])?;
+    let conn = state.db.lock()?;
 
     let mut stmt = conn
         .prepare(
@@ -274,7 +268,7 @@ pub fn export_invoices_csv(
              WHERE branch_id = ?1 AND DATE(created_at) BETWEEN ?2 AND ?3 AND status != 'cancelled' \
              ORDER BY created_at",
         )
-        .map_err(|e| e.to_string())?;
+        ?;
 
     let mut csv = String::from("\u{FEFF}invoice_number,invoice_type,subtotal,vat_amount,total,created_at\n");
 
@@ -289,10 +283,10 @@ pub fn export_invoices_csv(
                 row.get::<_, String>(5)?,
             ))
         })
-        .map_err(|e| e.to_string())?;
+        ?;
 
     for row in rows {
-        let (num, typ, sub, vat, total, created) = row.map_err(|e| e.to_string())?;
+        let (num, typ, sub, vat, total, created) = row?;
         csv.push_str(&format!("{},{},{:.2},{:.2},{:.2},{}\n", num, typ, sub, vat, total, created));
     }
 

@@ -1,10 +1,10 @@
 {
   "identifier": "default",
-  "description": "Default capability",
+  "description": "Default capability for Wholesale POS",
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "sql:default",
-    "shell:default"
+    "core:window:allow-close",
+    "core:window:allow-minimize"
   ]
 }
