@@ -1,0 +1,234 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+
+@theme {
+  --font-family-sans: "Cairo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  /* ElitePOS Primary Colors — Deep Blue */
+  --color-primary-50: #eff2ff;
+  --color-primary-100: #dce1ff;
+  --color-primary-200: #b7c4ff;
+  --color-primary-300: #8e9eff;
+  --color-primary-400: #5a73f8;
+  --color-primary-500: #2f54cb;
+  --color-primary-600: #0037b0;
+  --color-primary-700: #00247d;
+  --color-primary-800: #001a5c;
+  --color-primary-900: #001551;
+
+  /* Surface Colors — Lavender-White */
+  --color-surface-50: #ffffff;
+  --color-surface-100: #faf8ff;
+  --color-surface-200: #f4f2fd;
+  --color-surface-300: #eeedf7;
+  --color-surface-400: #e8e7f2;
+  --color-surface-500: #e2e1ec;
+  --color-surface-600: #dad9e3;
+
+  /* Success Colors */
+  --color-success-50: #ecfdf5;
+  --color-success-100: #d1fae5;
+  --color-success-500: #10b981;
+  --color-success-600: #059669;
+  --color-success-700: #047857;
+
+  /* Warning Colors */
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+
+  /* Destructive / Error Colors */
+  --color-destructive-50: #fef2f2;
+  --color-destructive-100: #ffdad6;
+  --color-destructive-500: #ef4444;
+  --color-destructive-600: #ba1a1a;
+  --color-destructive-700: #93000a;
+
+  /* Neutral / Outline Colors */
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #747685;
+  --color-gray-600: #444654;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #1a1b22;
+
+  /* Background & Foreground */
+  --color-background: #faf8ff;
+  --color-foreground: #1a1b22;
+  --color-muted: #f4f2fd;
+  --color-muted-foreground: #747685;
+  --color-border: #c4c5d6;
+  --color-input: #c4c5d6;
+  --color-ring: #2f54cb;
+
+  /* Spacing */
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-5: 1.25rem;
+  --spacing-6: 1.5rem;
+  --spacing-8: 2rem;
+  --spacing-10: 2.5rem;
+  --spacing-12: 3rem;
+  --spacing-gutter: 16px;
+  --spacing-container-padding: 24px;
+
+  /* Border Radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-full: 9999px;
+}
+
+/* RTL Base Styles */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: "Cairo", system-ui, -apple-system, sans-serif;
+  background-color: #faf8ff;
+  color: #1a1b22;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Touch target minimum size */
+button, a, input, select, textarea {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Scrollbar styling for RTL */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f4f2fd;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c4c5d6;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #747685;
+}
+
+/* Focus styles */
+:focus-visible {
+  outline: 2px solid #2f54cb;
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background-color: #dce1ff;
+  color: #001551;
+}
+
+/* Number input spin buttons - hide for cleaner UI */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Shake Animation */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+/* Toast Animations */
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(40px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes toastFlash {
+  0% { background-color: rgba(47, 84, 203, 0.2); }
+  100% { background-color: transparent; }
+}
+
+.animate-toast-slide-in {
+  animation: toastSlideIn 0.3s ease-out forwards;
+}
+
+.animate-toast-flash {
+  animation: toastFlash 0.6s ease-out forwards;
+}
+
+:root {
+  --background: #faf8ff;
+  --foreground: #1a1b22;
+  --card: #ffffff;
+  --card-foreground: #1a1b22;
+  --popover: #ffffff;
+  --popover-foreground: #1a1b22;
+  --primary: #00247d;
+  --primary-foreground: #ffffff;
+  --secondary: #555f70;
+  --secondary-foreground: #ffffff;
+  --muted: #f4f2fd;
+  --muted-foreground: #747685;
+  --accent: #eeedf7;
+  --accent-foreground: #1a1b22;
+  --destructive: #ba1a1a;
+  --border: #c4c5d6;
+  --input: #c4c5d6;
+  --ring: #2f54cb;
+  --chart-1: #00247d;
+  --chart-2: #2f54cb;
+  --chart-3: #5a73f8;
+  --chart-4: #8e9eff;
+  --chart-5: #b7c4ff;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1a1b22;
+  --sidebar-primary: #00247d;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f4f2fd;
+  --sidebar-accent-foreground: #1a1b22;
+  --sidebar-border: #e2e1ec;
+  --sidebar-ring: #2f54cb;
+  --radius: 0.625rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}

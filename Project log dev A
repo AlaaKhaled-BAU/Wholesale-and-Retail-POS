@@ -1,0 +1,772 @@
+# Project Log — Dev A
+
+## التاريخ: 2026-04-24
+
+---
+
+### التغيير: تبديل موقع السلة ومنطقة البحث في شاشة البيع (POSPage.tsx)
+
+**الملف المُعدَّل:** `src/pages/POSPage.tsx`
+
+**الحالة قبل التغيير:**
+- المنطقة الواسعة (`flex-1`) على اليمين (في RTL) كانت تحتوي على: شريط البحث، نتائج البحث، فلتر الفئات، وشبكة المنتجات.
+- الشريط الجانبي الضيق (`w-96`) على اليسار (في RTL) كان يحتوي على: السلة (السلة)، عناصر السلة المكدسة عمودياً، الإجماليات، وأزرار الإجراءات (الدفع، خصم، عميل، تعليق، إرجاع).
+
+**الحالة بعد التغيير:**
+- **المنطقة الواسعة (`flex-1`) أصبحت تحتوي على السلة كجدول فاتورة واسع:**
+  - عنوان السلة مع عدد المنتجات ومعلومات العميل.
+  - عناصر السلة معروضة على شكل صفوف أفقية (Invoice Table) باستخدام `grid-cols-[auto_1fr_auto_auto_auto_auto]`.
+  - كل صف يعرض: أيقونة المنتج، الاسم + الباركود، أزرار التحكم في الكمية (+/−)، السعر الوحدة، الإجمالي السطري، وزر الحذف.
+  - قسم الإجماليات + أزرار الإجراءات في أسفل المنطقة الواسعة، باستخدام `flex-col lg:flex-row` لتوزيع الأزرار على اليسار والإجماليات + زر الدفع على اليمين.
+- **الشريط الجانبي الضيق (`w-80`) أصبح يحتوي على قائمة المنتجات السريعة (Quick-Add):**
+  - شريط بحث مدمج.
+  - نتائج البحث معروضة كقائمة مدمجة بأيقونات صغيرة.
+  - فلتر الفئات + شبكة منتجات مضغوطة (2 أعمدة، بطاقات أصغر) عند عدم وجود نص بحث.
+
+**لماذا:**
+- تحويل السلة إلى العرض الرئيسي يجعلها أشبه بفاتورة مفصلة، مما يسهل مراجعة الأصناف قبل الدفع.
+- نقل البحث والمنتجات إلى الشريط الجانبي الضيق يحولها إلى "قائمة إضافة سريعة" دون إرهاق المساحة الرئيسية.
+
+**إدارة الحالة:**
+- لم يتم تغيير أي شيء في إدارة الحالة (Zustand stores).
+- جميع الـ handlers (`addItem`, `updateQty`, `removeItem`, `handlePayment`, إلخ) بقيت كما هي.
+- جميع النوافذ المنبثقة (Modals) بقيت في نفس المكان ومتصلة بنفس الـ state.
+
+**ملاحظات تنفيذية:**
+- أضيفت `min-w-0` إلى الحاوية الرئيسية للسلة لمنع overflow في Flexbox.
+- أضيفت `shrink-0` إلى الشريط الجانبي للمنتجات لضمان عدم تصغيره.
+- تستخدم عناصر السلة الآن `grid grid-cols-1 md:grid-cols-[auto_1fr_auto_auto_auto_auto]` لتكون responsive (تكدس عمودياً على الشاشات الصغيرة جداً).
+
+---
+
+## التاريخ: 2026-04-24 (الجزء الثاني — تصميم ElitePOS الكامل)
+
+### التغيير: إعادة تصميم التطبيق بالكامل بألوان وتخطيط ElitePOS
+
+**الملفات المُعدَّلة:**
+1. `src/styles/base.css` — تحديث الألوان
+2. `src/components/layout/AppShell.tsx` — هيكل جديد
+3. `src/components/layout/Sidebar.tsx` — تصميم جديد
+4. `src/components/layout/TopBar.tsx` — تصميم جديد
+5. `src/pages/POSPage.tsx` — إعادة كتابة كاملة
+
+---
+
+### Phase 1: تحديث base.css
+
+**ما تم:**
+- إضافة ألوان ElitePOS الجديدة (Deep Blue primary, Lavender-White surfaces)
+- تحديث Primary: `#00247d` (أزرق داكن)
+- تحديث Surface: `#faf8ff` (خلفية لافندر بيضاء)
+- تحديث Success: `#10b981` (أخضر)
+- تحديث Error/Destructive: `#ba1a1a` (أحمر)
+- تحديث Neutral/Outline: `#747685`, `#c4c5d6`
+- **إزالة Dark Mode بالكامل** (حذف `.dark` block + `@custom-variant dark`)
+- تحديث `:root` variables لتستخدم HEX colors بدلاً من oklch
+
+**لماذا:** توحيد الألوان مع تصميم ElitePOS وإزالة التعقيد غير الضروري.
+
+---
+
+### Phase 2: إعادة بناء AppShell + Sidebar + TopBar
+
+**AppShell.tsx:**
+- تبسيط الهيكل: Sidebar ثابت دائماً (لا toggle)
+- Main content يبدأ بعد Sidebar مباشرة (`mr-64`)
+
+**Sidebar.tsx (تصميم جديد):**
+- Brand header: أيقونة + "Elite Retail" + "Riyadh Branch"
+- قائمة التنقل الرئيسية: Dashboard, Sales, Inventory, Customers, Reports, Support
+- Active state: `bg-primary-50 text-primary-700`
+- Footer: Lock Screen, Logout
+- Border-left للفصل
+- **لا يوجد زر إغلاق** (Sidebar دائم)
+
+**TopBar.tsx (تصميم جديد):**
+- اليمين: "ElitePOS Saudi" بخط عريض
+- الوسط: شريط بحث (`max-w-md`)
+- اليسار: أيقونات (إشعارات، إعدادات، لغة) + صورة البروفايل
+- **إزالة:** Dark mode toggle, Scanner status, Sidebar toggle, Store info badge
+
+---
+
+### Phase 3-8: إعادة كتابة POSPage.tsx (ElitePOS Design)
+
+**التخطيط الجديد:**
+- **65% منتجات** (يمين في RTL) — Product Grid
+- **35% سلة** (يسار في RTL) — Transaction Panel
+
+**منطقة المنتجات (65%):**
+- شريط بحث في الأعلى
+- Category chips أفقية قابلة للتمرير مع أيقونات
+- Product cards: `grid-cols-4`، كل بطاقة تحتوي على:
+  - صورة placeholder (Package icon في خلفية primary-50)
+  - اسم المنتج (خط عريض)
+  - السعر (primary-700)
+  - Badge مخزون (أخضر/أحمر)
+- Hover: `hover:border-primary-400 hover:shadow-md`
+- Search results: قائمة مدمجة مع أيقونات
+
+**منطقة السلة (35%):**
+- Order header: "الطلب الحالي" + رقم الفاتورة (`#0001`)
+- Cart items: `grid-cols-[2fr_1fr_1fr_auto]`
+  - الاسم + الباركود
+  - أزرار +/− في خلفية رمادية
+  - السعر (LTR)
+  - زر حذف (أحمر)
+- Order Summary:
+  - المجموع الفرعي
+  - الخصم (إن وُجد)
+  - الضريبة 15%
+  - **الإجمالي** بخط `text-2xl font-bold text-primary-700`
+- Payment Methods: 3 أزرار (نقدي / فيزا / CLIQ)
+  - hover: `border-success-500 bg-success-50`
+  - OnClick → يفتح Payment Modal
+- Secondary Actions: خصم | عميل | تعليق | إرجاع
+- Checkout Button: "دفع وإصدار الفاتورة"
+  - `h-16 bg-primary-700 text-white rounded-xl`
+  - أيقونة CreditCard
+
+**النوافذ المنبثقة (Modals) — تحديث التصميم فقط:**
+- Payment Modal: ألوان جديدة + border-2 للـ methods
+- Receipt Preview: نفس المحتوى، ألوان جديدة
+- Customer Modal: نفس المحتوى، ألوان جديدة
+- Discount Modal: نفس المحتوى، ألوان جديدة
+- Success Modal: نفس المحتوى، ألوان جديدة
+- Refund Confirmation: نفس المحتوى، ألوان جديدة
+- Suspended Drawer: نفس المحتوى، ألوان جديدة
+
+**ما تم الحفاظ عليه (Logic unchanged):**
+- جميع Zustand stores (`useCartStore`, `useProductStore`, `useInvoiceStore`, etc.)
+- جميع الـ state hooks (useState)
+- جميع الـ refs (barcodeInputRef, searchInputRef, scanBufferRef)
+- جميع الـ useEffects (barcode scanning, search debounce)
+- جميع الـ handlers (`handleBarcodeScan`, `handleProductClick`, `handlePayment`, etc.)
+- جميع الـ keyboard shortcuts (Escape, F1, Ctrl+P)
+- Refund mode كاملاً
+- Suspended invoices logic كاملاً
+
+**ما تمت إضافته:**
+- `paymentLabels` object لترجمة طرق الدفع
+- Category icons mapping (Coffee, IceCream, Cookie, Croissant)
+- Counter للفواتير (`suspendedCarts.length + 1`)
+
+---
+
+### ملاحظات تنفيذية
+
+- `tsc --noEmit` يمر بنجاح — لا أخطاء TypeScript
+- جميع الألوان الآن تستخدم الـ ElitePOS palette
+- التطبيق يعمل بـ Light Mode فقط
+- RTL محافظ عليه بالكامل
+- الخط: Cairo (unchanged)
+
+---
+
+---
+
+## التاريخ: 2026-04-24 (الجزء الثالث — إصلاحات Sidebar)
+
+### التغيير 1: زر إظهار/إخفاء القائمة الجانبية (Sidebar Toggle)
+
+**الملفات المُعدَّلة:**
+- `src/components/layout/AppShell.tsx`
+- `src/components/layout/Sidebar.tsx`
+- `src/components/layout/TopBar.tsx`
+
+**ما تم:**
+- إضافة `useState` في `AppShell` لإدارة حالة Sidebar (`sidebarOpen`)
+- تمرير الحالة والـ toggle handler للـ `Sidebar` و `TopBar`
+- إضافة زر toggle في `TopBar` باستخدام أيقونات `PanelRightOpen` / `PanelRightClose`
+- الزر يغير لونه وخلفيته حسب حالة Sidebar (active = primary)
+- `Sidebar` يدعم الآن إخفاء/إظهار مع animation (`translate-x-full`)
+- إضافة backdrop للـ mobile/tablet عند فتح الـ sidebar
+- إضافة زر X لإغلاق الـ sidebar في الشاشات الصغيرة
+- المحتوى الرئيسي يتأقلم تلقائياً مع حالة Sidebar (`mr-64` أو `mr-0`)
+
+### التغيير 2: إصلاح عناصر التنقل (Nav Items)
+
+**الملف المُعدَّل:** `src/components/layout/Sidebar.tsx`
+
+**قبل:**
+- `لوحة التحكم` → `/pos`
+- `المبيعات` → `/pos` (نفس الصفحة!)
+- `الفواتير` → غير موجود!
+- `الدعم` → `/support` (صفحة غير موجودة)
+
+**بعد:**
+- `لوحة التحكم` → `/pos` ✅
+- `الفواتير` → `/invoices` (جديد)
+- `المخزون` → `/inventory` ✅
+- `العملاء` → `/customers` ✅
+- `التقارير` → `/reports` ✅
+- تم **حذف** زر `الدعم` لأنه لا يؤدي لأي صفحة موجودة
+
+### ملاحظات تنفيذية
+- `tsc --noEmit` يمر بنجاح — لا أخطاء TypeScript
+- Sidebar responsive: يعمل toggle في كل الشاشات
+- في الشاشات الكبيرة (lg+): Sidebar يمكن إخفاؤه مع animation
+- في الشاشات الصغيرة: Sidebar يظهر كـ overlay مع backdrop
+
+---
+
+---
+
+## التاريخ: 2026-04-24 (الجزء الرابع — إصلاحات Sidebar Toggle)
+
+### التغيير 1: إصلاح زر إظهار/إخفاء القائمة
+
+**المشكلة:**
+- الزر لم يكن يعمل على الشاشات الكبيرة (desktop) بسبب `lg:translate-x-0` في CSS
+- الحالة الافتراضية كانت `true` (مفتوحة)
+
+**الحل:**
+- `AppShell.tsx`: تغيير `useState(true)` إلى `useState(false)` — القائمة مخفية افتراضياً
+- `Sidebar.tsx`: إزالة `lg:translate-x-0` من الـ aside لضمان الالتزام بحالة `isOpen` على كل الشاشات
+- `Sidebar.tsx`: إضافة `onOpen` prop
+- `Sidebar.tsx`: إصلاح زر التبديل العائم (floating button) — يظهر فقط عندما تكون القائمة مخفية (`!isOpen`) ويعمل بشكل صحيح
+- `Sidebar.tsx`: إزالة `lg:hidden` من الـ backdrop ليظهر على كل الشاشات
+
+### التغيير 2: المحتوى الديناميكي (Dynamic Pages)
+
+**الحل:**
+- المحتوى الرئيسي يستخدم `transition-all` مع `mr-64` / `mr-0`
+- عند إظهار القائمة: المحتوى يتقلص بسلاسة من اليمين
+- عند إخفاء القائمة: المحتوى يتمدد ليملأ الشاشة بالكامل
+- الانتقال يستغرق 300ms مع `cubic-bezier` للسلاسة
+
+### ملفات معدلة:
+- `src/components/layout/AppShell.tsx`
+- `src/components/layout/Sidebar.tsx`
+
+### ملاحظات:
+- `tsc --noEmit` ✅ لا أخطاء
+- زر التبديل العائم يظهر في الأسفل يمين الشاشة عندما تكون القائمة مخفية
+- Backdrop داكن يظهر خلف القائمة عند فتحها (للإغلاق بالنقر خارجها)
+
+---
+
+---
+
+## التاريخ: 2026-04-24 (الجزء الخامس — إزالة الظل/الخلفية)
+
+### التغيير: إزالة الـ Backdrop الداكن عند فتح القائمة
+
+**المشكلة:** عند فتح القائمة الجانبية، يظهر ظل داكن (shadow/backdrop) يغطي الشاشة بالكامل.
+
+**الحل:** حُذف الـ `<div>` الخاص بالـ backdrop من `Sidebar.tsx`.
+
+**النتيجة:** القائمة تنزلق فوق المحتوى مباشرة بدون أي طبقة داكنة.
+
+**الملف المُعدَّل:** `src/components/layout/Sidebar.tsx`
+
+---
+
+---
+
+## التاريخ: 2026-04-24 (الجزء السادس — إضافة زر الإعدادات للقائمة)
+
+### التغيير: إضافة زر "الإعدادات" في Sidebar
+
+**الملف المُعدَّل:** `src/components/layout/Sidebar.tsx`
+
+**ما تم:**
+- إضافة `Settings` إلى imports من `lucide-react`
+- إضافة `{ path: '/settings', label: 'الإعدادات', icon: Settings }` إلى `mainNavItems`
+
+**موقع الزر:** في أسفل قائمة التنقل الرئيسية (بعد "التقارير")
+
+---
+
+---
+
+## التاريخ: 2026-04-24 (الجزء السابع — اختصارات لوحة المفاتيح F1-F4)
+
+### التغيير: إضافة اختصارات لوحة المفاتيح للدفع
+
+**الملف المُعدَّل:** `src/pages/POSPage.tsx`
+
+**الاختصارات الجديدة:**
+
+| المفتاح | الوظيفة | الشروط |
+|---------|---------|--------|
+| **F1** | اختيار الدفع **نقدي** (cash) + فتح نافذة الدفع | السلة غير فارغة + ليس وضع الإرجاع |
+| **F2** | اختيار الدفع **بطاقة** (Visa/MADA) + فتح نافذة الدفع | السلة غير فارغة + ليس وضع الإرجاع |
+| **F3** | اختيار الدفع **CLIQ** + فتح نافذة الدفع | السلة غير فارغة + ليس وضع الإرجاع |
+| **F4** | **تأكيد البيع** (confirm purchase) | إذا كانت نافذة الدفع مفتوحة والمبلغ صحيح → يؤكد البيع مباشرة. إذا كانت النافذة مغلقة → يفتحها بنظام نقدي |
+
+**ملاحظات:**
+- الاختصارات لا تعمل أثناء الكتابة في أي input
+- الاختصارات لا تعمل في وضع الإرجاع (Refund Mode)
+- الـ Toast notification يظهر لإعلام الكاشير بالطريقة المختارة
+- `tsc --noEmit` ✅ لا أخطاء
+
+---
+
+---
+
+## التاريخ: 2026-04-24 (الجزء الثامن — إصلاح خطأ Syntax)
+
+### التغيير: إصلاح خطأ `PARSE_ERROR` في POSPage.tsx
+
+**الملف المُعدَّل:** `src/pages/POSPage.tsx`
+
+**المشكلة:**
+- خطأ في السطر 127: `Expected a semicolon or an implicit semicolon after a statement`
+- السبب: قوس إغلاق زائد `])));` (4 أقواس) بدلاً من `]));` (3 أقواس)
+
+**الحل:**
+- حُذف القوس الزائد
+
+**النتيجة:**
+- `pnpm tsc --noEmit` ✅ لا أخطاء
+
+---
+
+---
+
+## التاريخ: 2026-04-24 (الجزء التاسع — ترقية صفحة إدارة العملاء)
+
+### التغيير: إعادة تصميم `CustomersPage.tsx` بمستوى "Premium Custom-Built"
+
+**الملف المُعدَّل:** `src/pages/CustomersPage.tsx`
+
+### المهام المُنجزة:
+
+**Task 1 — Elevate Aesthetic & Depth:**
+- خلفية الصفحة الكاملة: `#F8F9FA` (soft cool gray) عبر `-m-6 p-6` على الـ container
+- حاويات المحتوى (search card + table container): خلفية `#FFFFFF` نقية
+- إضافة `shadow-sm` + `border border-[#e2e1ec]` لإنشاء depth وطبقات
+
+**Task 2 — Touchscreen Optimization (Fitts's Law):**
+- زر "+ إضافة عميل": `h-14` (56px) + `px-6` + `rounded-xl` — سهل الضغط بالإصبع
+- أيقونات الإجراءات في الجدول: `p-2` + `rounded-lg` — tap target موسع
+- صفوف الجدول: `py-4` + `px-6` — مساحة أكبر
+- حقول الإدخال في الـ Modals: `py-3` — أطول للـ touchscreen
+
+**Task 3 — Correct Contextual Logic:**
+- نص placeholder في شريط البحث: `"البحث في النظام (العملاء)..."`
+
+**Task 4 — High-End Table Styling:**
+- Header row: `bg-[#F1F5F9]` (light blue-gray)
+- Header text: `font-bold` + `text-[#1a1b22]`
+- Alignment: `px-6 py-4` موحد لكل الأعمدة
+- Divider: `divide-[#e2e1ec]` بدلاً من `divide-gray-100`
+
+**Task 5 — Actionable Empty State:**
+- أيقونة أكبر (`w-16 h-16`) مع `opacity-40`
+- نص `text-lg font-medium`
+- **زر جديد:** "إضافة أول عميل" — `bg-primary-50` + `border border-primary-200` + `h-12`
+- الزر يفتح modal إضافة العميل مباشرة
+
+**Task 6 — Final Polish & Branding:**
+- عنوان الصفحة: `text-3xl font-extrabold tracking-tight`
+- جميع النصوص تستخدم `text-[#1a1b22]` بدلاً من `text-gray-900`
+- Negative space واسع (`py-16` للـ empty state)
+- Modals: ألوان ElitePOS متناسقة (`border-[#e2e1ec]`, `text-[#555f70]`)
+
+### ملاحظات:
+- `tsc --noEmit` ✅ لا أخطاء
+- لم يتم تغيير أي logic — فقط التصميم
+
+---
+
+---
+
+## التاريخ: 2026-04-24 (الجزء العاشر — ترقية صفحة الفواتير)
+
+### التغيير: إعادة تصميم `InvoicesPage.tsx` بمستوى "Ultra-Premium, Touchscreen-Optimized"
+
+**الملف المُعدَّل:** `src/pages/InvoicesPage.tsx`
+
+### المهام المُنجزة:
+
+**Task 1 — Overhaul Date Pickers & Filters (Touch-Screen Optimization):**
+- Date inputs: `h-12` (48px) + `rounded-xl` + أيقونة Calendar داكنة (`text-[#555f70]`)
+- Consistent spacing: `gap-4` بين البحث واختيار التواريخ
+- Filter tabs: تحويلها إلى **Segmented Control** كبير — `h-14` + `flex-1` + `text-base font-bold`
+- Active tab: `bg-primary-700 text-white shadow-md`
+- Tab badges: `font-black` + contrast عالي (أبيض على primary للنشط، رمادي على خلفية فاتحة للغير نشط)
+
+**Task 2 — Elevate ZATCA & Invoice Status Badges:**
+- Semantic pill-shaped tags مع خلفيات **صلبة** (solid) بدلاً من pale:
+  - `draft` (مسودة): `bg-[#9CA3AF] text-white`
+  - `cleared` (مُبلَّغ): `bg-success-600 text-white` — أخضر زاهي
+  - `pending` (معلق): `bg-warning-500 text-white`
+  - `rejected` (مرفوض): `bg-destructive-600 text-white` — أحمر قوي
+- Invoice type badges:
+  - `standard` (ضريبية): `bg-[#6366F1] text-white` — أزرق/بنفسجي
+  - `simplified` (مبسطة): `bg-[#8B5CF6] text-white` — بنفسجي
+
+**Task 3 — Enlarge Table Action Icons (Fitts's Law):**
+- أيقونات الإجراءات: `w-11 h-11` (44px touch target) + `rounded-full`
+- Hover state: `hover:bg-primary-50 hover:text-primary-700`
+- Icon size: `w-5 h-5`
+
+**Task 4 — Correct Contextual Logic & Alignment:**
+- Search placeholder: `"البحث في النظام..."`
+- Invoice count: مُنقل إلى `bg-white` card مع حدود، مُحاذى مع header
+- Table header: `bg-[#F1F5F9]` + `font-bold text-[#1a1b22]` + `px-6 py-4`
+- Pagination: `w-10 h-10` + `rounded-xl` + أزرار أكبر
+
+**Global Design System Applied:**
+- Page bg: `#F8F9FA`
+- Cards: `#FFFFFF` + `shadow-sm` + `border border-[#e2e1ec]`
+- Empty state: أيقونة `w-16 h-16` + نص `text-lg font-medium` + زر "إعادة ضبط الفلاتر"
+- Modal: ألوان ElitePOS متناسقة
+
+### ملاحظات:
+- `tsc --noEmit` ✅ لا أخطاء
+- لم يتم تغيير أي logic — فقط التصميم
+
+---
+
+---
+
+## التاريخ: 2026-04-24 (الجزء الحادي عشر — ترقية صفحة المخزون)
+
+### التغيير: إعادة تصميم `InventoryPage.tsx` بنفس نظام التصميم الممتاز
+
+**الملف المُعدَّل:** `src/pages/InventoryPage.tsx`
+
+### المهام المُنجزة:
+
+**Task 1 — Aesthetic & Depth:**
+- خلفية الصفحة: `#F8F9FA`
+- الحاويات: `#FFFFFF` + `shadow-sm` + `border border-[#e2e1ec]`
+
+**Task 2 — Touchscreen Optimization (Fitts's Law):**
+- زر "+ إضافة منتج": `h-14` (56px) + `rounded-xl` + `shadow-md`
+- حقول البحث والفلتر: `h-12` (48px) + `rounded-xl`
+- زر "الفئات": `h-12` + خلفية بيضاء
+
+**Task 3 — Contextual Logic:**
+- نص placeholder: `"البحث في النظام (المخزون)..."`
+
+**Task 4 — High-End Table Styling:**
+- Header row: `bg-[#F1F5F9]` + `font-bold text-[#1a1b22]` + `px-6 py-4`
+- Body rows: `hover:bg-[#f4f2fd]` + `px-6 py-4`
+- Divider: `divide-[#e2e1ec]`
+
+**Task 5 — Actionable Empty State:**
+- أيقونة `w-16 h-16` + `opacity-40`
+- نص `text-lg font-medium`
+- زر "إضافة أول منتج" — `bg-primary-50` + `border border-primary-200`
+
+**Task 6 — Touch-Optimized Components:**
+- Toggle switch: `w-12 h-7` (أكبر) مع thumb `w-5 h-5`
+- أيقونة التعديل: `w-11 h-11 rounded-full` (44px touch target)
+- Pagination: `h-11` + `rounded-xl` + أزرار أكبر
+
+**Task 7 — Low Stock Alert:**
+- تكبير الأيقونة إلى `w-12 h-12`
+- تكبير الخط إلى `text-base`
+- ألوان ElitePOS: `bg-destructive-50` + `border-destructive-200`
+
+**Task 8 — Modal Polish:**
+- حقول الإدخال: `py-3` + `rounded-xl`
+- أزرار: `py-3` + `rounded-xl`
+- ألوان ElitePOS متناسقة
+
+### ملاحظات:
+- `tsc --noEmit` ✅ لا أخطاء
+- لم يتم تغيير أي logic — فقط التصميم
+
+---
+
+---
+
+## التاريخ: 2026-04-24 (الجزء الثاني عشر — ترقية صفحة التقارير)
+
+### التغيير: إعادة تصميم `ReportsPage.tsx` بمستوى "Pro & Effective"
+
+**الملف المُعدَّل:** `src/pages/ReportsPage.tsx`
+
+### المهام المُنجزة:
+
+**1 — Premium Dashboard Foundation:**
+- خلفية الصفحة: `#F8F9FA`
+- Chunky segmented tabs: `h-14` + `flex-1` + `bg-primary-700 text-white` للنشط
+- كل بطاقة: `#FFFFFF` + `shadow-sm` + `border border-[#e2e1ec]`
+
+**2 — KPI Cards (More Pro & Effective):**
+- 6 بطاقات ملونة للتقرير اليومي (بدلاً من 4)
+- كل بطاقة: لون صلب (solid) + أيقونة بيضاء + قيمة كبيرة `font-black text-2xl`
+- إضافة: الربح، التكلفة، متوسط الفاتورة
+- Trend badges: `+12%` مع `bg-white/20`
+- بطاقات الفترة: 4 ألوان مختلفة (primary, success, warning, info)
+
+**3 — Advanced Charts:**
+- Payment Donut: innerRadius 60 + outerRadius 90 + paddingAngle 4
+- Top Products: Bar أفقي مع `radius={[0, 8, 8, 0]}`
+- Hourly Sales: **Area Chart** مع gradient fill (أنيق جداً)
+- Period Report: **Dual Area Chart** (المبيعات + الربح) مع gradients
+- Tooltip formatter: يعرض `ر.س` مع القيم
+
+**4 — Touchscreen Optimization:**
+- Date pickers: `h-12` + `rounded-xl` + أيقونة Calendar داكنة
+- Export buttons: `h-12` + `rounded-xl`
+- Table headers: `bg-[#F1F5F9] font-bold px-6 py-4`
+
+**5 — Shift Report Enhancement:**
+- Info cards: `bg-[#f4f2fd] rounded-xl` للمعلومات الأساسية
+- Payment breakdown: أيقونات دائرية + قيم كبيرة `font-black`
+- حالة الصندوق: بطاقة ملونة (أخضر للمتوافق، أحمر للفرق)
+
+**6 — Inventory Report Enhancement:**
+- 3 KPI cards مع أيقونات كبيرة (`w-12 h-12`) + ألوان ElitePOS
+- Low stock table: نفس تصميم الجداول الممتاز
+- Alert header: `AlertTriangle` + نص `text-destructive-600`
+
+### ملاحظات:
+- `tsc --noEmit` ✅ لا أخطاء
+- إضافة mock data جديد: `hourlySales` + `totalCost` + `profit` + `categoriesCount`
+- لم يتم تغيير أي logic — فقط التصميم والبيانات التوضيحية
+
+---
+
+---
+
+## التاريخ: 2026-04-24 (الجزء الثالث عشر — إصلاحات Audit)
+
+### التغيير 1: إصلاح base.css
+
+**الملف المُعدَّل:** `src/styles/base.css`
+
+**المشاكل التي تم إصلاحها:**
+1. **إزالة @theme block المكرر** (السطور 180-221) الذي كان يعيد تعريف الألوان والخطوط ويستخدم متغيرات غير معرَّفة.
+2. **إضافة animate-toast-slide-in و animate-toast-flash** classes التي كانت الـ keyframes الخاصة بها موجودة لكن لا class يستخدمها.
+3. **تنظيف الملف** وإزالة التكرارات.
+
+**لماذا:** كان الـ @theme block المكرر يسبب تعارضات في CSS variables وكسر scaling للـ border radius بسبب `--radius` غير معرَّف.
+
+---
+
+### التغيير 2: ترقية SettingsPage.tsx (Touch Optimization + ElitePOS Design)
+
+**الملف المُعدَّل:** `src/pages/SettingsPage.tsx`
+
+**المشاكل التي تم إصلاحها:**
+1. **Touch targets أقل من 44px:**
+   - أزرار `py-2` → `h-12` أو `py-3` (48px)
+   - أزرار الجدول `p-1` → `w-11 h-11 rounded-full` (44px)
+   - حقول الإدخال `py-2` → `py-3`
+   - أزرار المودال `py-2` → `h-12`
+2. **تطبيق نظام ElitePOS:**
+   - خلفية الصفحة: `#F8F9FA`
+   - الحاويات: `#FFFFFF` + `shadow-sm` + `border border-[#e2e1ec]`
+   - عنوان الصفحة: `text-3xl font-extrabold tracking-tight`
+   - رأس الجدول: `bg-[#F1F5F9]` + `font-bold text-[#1a1b22]`
+   - ألوان النصوص: `text-[#1a1b22]` بدلاً من `text-gray-900`
+   - زر "إضافة مستخدم": `h-14` + `rounded-xl` + `shadow-md`
+
+---
+
+### التغيير 3: توحيد الاسم التجاري
+
+**الملف المُعدَّل:** `src/components/layout/Sidebar.tsx`
+
+**ما تم:** تغيير "Elite Retail" إلى "ElitePOS Saudi" ليتوافق مع TopBar.
+
+---
+
+### التغيير 4: إصلاح اختصارات F1-F3
+
+**الملف المُعدَّل:** `src/pages/POSPage.tsx`
+
+**المشكلة:** F1-F3 كانت تفتح نافذة الدفع حتى لو كانت مفتوحة بالفعل.
+
+**الحل:** إضافة شرط `&& !showPaymentModal` لكل اختصار.
+
+---
+
+### التغيير 5: تبسيط toggle القائمة الجانبية
+
+**الملف المُعدَّل:** `src/components/layout/Sidebar.tsx`
+
+**المشكلة:** زر التبديل كان في 3 أماكن (TopBar، زر X في Sidebar، زر عائم).
+
+**الحل:** إزالة الزر العائم (floating button) — التبديل الآن فقط عبر:
+- TopBar: زر القائمة
+- Sidebar: زر X لإغلاق
+
+---
+
+### ملاحظات:
+- `tsc --noEmit` ✅ لا أخطاء
+- جميع الملفات المُعدَّلة تتبع الآن نظام ElitePOS بشكل كامل
+
+---
+
+---
+
+## التاريخ: 2026-04-24 (الجزء الرابع عشر — إصلاحات Audit إضافية)
+
+### التغيير 1: إصلاح index.css
+
+**الملف المُعدَّل:** `src/index.css`
+
+**المشاكل التي تم إصلاحها:**
+1. **إزالة Dark Mode** بالكامل (`@media (prefers-color-scheme: dark)`) — التطبيق يعمل Light Mode فقط.
+2. **إزالة `color-scheme: light dark`** من `:root`.
+3. **إصلاح `#root`:**
+   - `width: 1126px` → `width: 100%` (لا يوجد حد أقصى للعرض في تطبيق POS)
+   - `text-align: center` → `text-align: inherit` (يؤثر على RTL)
+   - `border-inline: 1px solid var(--border)` → `border-inline: none`
+   - `margin: 0 auto` → `margin: 0`
+
+**لماذا:** كان `#root` المحدود بـ 1126px يُقيِّد عرض التطبيق ويُضيف حدوداً غير مرغوب فيها.
+
+---
+
+### التغيير 2: تنظيف App.css
+
+**الملف المُعدَّل:** `src/App.css`
+
+**ما تم:** حذف جميع الـ styles المتبقية من قالب Vite (`.hero`, `#center`, `#next-steps`, `#docs`, `#spacer`, `.ticks`) وإبقاء الملف فارغاً تقريباً.
+
+**لماذا:** styles غير مستخدمة تُضيف حجماً غير ضروري وتُسبب تشتيت.
+
+---
+
+### التغيير 3: Touch Optimization كامل لـ POSPage.tsx
+
+**الملف المُعدَّل:** `src/pages/POSPage.tsx`
+
+**العناصر التي تم تكبيرها إلى 44px+:**
+
+| العنصر | قبل | بعد |
+|--------|-----|-----|
+| أزرار +/- في السلة | `w-6 h-6` (24px) | `w-10 h-10` (40px) |
+| زر حذف منتج من السلة | `p-1.5` (~30px) | `w-10 h-10` (40px) |
+| الأزرار الثانوية (خصم/عميل/تعليق/إرجاع) | `py-2` (~32px) | `h-12` (48px) |
+| أزرار +/- في وضع الإرجاع | `w-8 h-8` (32px) | `w-10 h-10` (40px) |
+| أزرار الإلغاء/تأكيد في وضع الإرجاع | `py-3` (~44px) | `h-12` (48px) |
+| زر حذف فاتورة معلقة | `p-1` (~26px) | `w-10 h-10` (40px) |
+| زر استعادة فاتورة معلقة | `py-2` (~32px) | `h-11` (44px) |
+| أزرار الإلغاء/تأكيد في المودالات | `py-2` إلى `py-3` | `h-12` (48px) |
+| زر معاينة الإيصال | `py-2.5` (~36px) | `h-12` (48px) |
+| زر إغلاق معاينة الإيصال | `py-2.5` (~36px) | `h-12` (48px) |
+| زر إغلاق مودال العملاء | `py-2` (~32px) | `h-12` (48px) |
+
+**ملاحظة:** تم تغيير `rounded-lg` إلى `rounded-xl` في الأزرار الكبيرة لتناسب نظام ElitePOS.
+
+---
+
+### التغيير 4: إصلاح useMemo dependency array في POSPage.tsx
+
+**الملف المُعدَّل:** `src/pages/POSPage.tsx`
+
+**المشكلة:** dependency array لـ `useKeyboardShortcuts` كان ينقصه `paymentMethod` و `invoiceDiscount`، مما قد يسبب **stale closure** عند استخدام F4.
+
+**الحل:** إضافة `paymentMethod` و `invoiceDiscount` إلى dependency array.
+
+---
+
+### ملاحظات:
+- `tsc --noEmit` ✅ لا أخطاء
+- جميع الملفات المُعدَّلة تتبع الآن نظام ElitePOS بشكل كامل
+- جميع أهداف اللمس (touch targets) في POSPage الآن 40px على الأقل، معظمها 44px+
+
+---
+
+---
+
+## التاريخ: 2026-04-24 (الجزء الخامس عشر — Re-check إضافي)
+
+### التغيير 1: إصلاح أزرار الإغلاق الصغيرة في المودالات
+
+**الملفات المُعدَّلة:**
+- `src/pages/POSPage.tsx` — زر إغلاق drawer الفواتير المعلقة: `p-2` → `w-10 h-10`
+- `src/pages/CustomersPage.tsx` — زر إغلاق مودال تفاصيل العميل: `p-2` → `w-10 h-10`
+- `src/pages/InvoicesPage.tsx` — زر إغلاق مودال تفاصيل الفاتورة: `p-2` → `w-10 h-10`
+
+### التغيير 2: توحيد أزرار المودالات إلى `rounded-xl` + `h-12`
+
+**الملفات المُعدَّلة:**
+- `src/pages/POSPage.tsx` — أزرار مودال الدفع الناجح (طباعة/بيع جديد): `py-3` + `rounded-lg` → `h-12` + `rounded-xl`
+- `src/pages/CustomersPage.tsx` — أزرار مودال إضافة/تعديل عميل ودفعة: `py-3` + `rounded-lg` → `h-12` + `rounded-xl`
+
+### التغيير 3: إزالة الألوان الرمادية من LoginPage
+
+**الملف المُعدَّل:** `src/pages/LoginPage.tsx`
+
+**ما تم:**
+- `text-gray-900` → `text-[#1a1b22]`
+- `text-gray-500` / `text-gray-400` → `text-[#747685]`
+- `bg-gray-100` / `bg-gray-200` / `bg-gray-300` → `bg-[#f4f2fd]` / `bg-[#e2e1ec]`
+- `border-gray-200` → `border-[#e2e1ec]`
+- `text-gray-700` → `text-[#555f70]`
+- تحديث النص السفلي: "Wholesale POS" → "ElitePOS Saudi"
+
+### التغيير 4: إصلاح ألوان المكونات المشتركة
+
+**الملفات المُعدَّلة:**
+- `src/components/common/LoadingSpinner.tsx` — `text-gray-500` → `text-[#747685]`
+- `src/components/common/EmptyState.tsx` — `text-gray-300` / `text-gray-900` / `text-gray-500` → ألوان ElitePOS
+- `src/components/common/ToastContainer.tsx` — زر الإغلاق: `p-1` (~26px) → `w-8 h-8` (32px)
+
+---
+
+### ملاحظات:
+- `tsc --noEmit` ✅ لا أخطاء
+- جميع الألوان الرمادية المخالفة لنظام ElitePOS تم استبدالها
+- جميع أزرار الإغلاق في المودالات الآن 40px على الأقل
+
+---
+
+---
+
+## التاريخ: 2026-04-24 (الجزء السادس عشر — Re-check نهائي)
+
+### التغيير 1: إصلاح أزرار الإجراءات في الجداول (تحت 44px)
+
+**الملفات المُعدَّلة:**
+- `src/pages/CustomersPage.tsx` — أزرار عرض/تعديل/دفعة في جدول العملاء: `p-2` (~36px) → `w-10 h-10` (40px) مع `rounded-xl`
+- `src/components/layout/Sidebar.tsx` — زر إغلاق Sidebar: `p-2` (~36px) → `w-10 h-10` (40px) مع `rounded-xl`
+- `src/components/layout/TopBar.tsx` — زر toggle القائمة: `p-2` (~40px) → `w-10 h-10` (40px) مع `rounded-xl`
+
+### التغيير 2: توحيد rounded-xl في أزرار كبيرة
+
+**الملفات المُعدَّلة:**
+- `src/pages/POSPage.tsx` — أزرار طرق الدفع (الرئيسية + في المودال): `rounded-lg` → `rounded-xl`
+- `src/pages/POSPage.tsx` — زر بحث فاتورة الإرجاع: `py-3` + `rounded-lg` → `h-12` + `rounded-xl`
+- `src/components/common/ErrorBoundary.tsx` — زر إعادة التحميل: `py-3` + `rounded-lg` → `h-12` + `rounded-xl`
+
+### التغيير 3: إزالة بقايا الألوان الرمادية
+
+**الملفات المُعدَّلة:**
+- `src/components/common/ErrorBoundary.tsx` — جميع `gray-*` → ألوان ElitePOS (`bg-[#faf8ff]`, `text-[#1a1b22]`, `text-[#747685]`, `bg-[#f4f2fd]`, `text-[#555f70]`)
+- `src/components/ui/button.tsx` — variants outline/secondary/ghost: `gray-*` → `border-[#e2e1ec]`, `bg-[#f4f2fd]`, `text-[#1a1b22]`
+- `src/pages/SettingsPage.tsx` — `text-gray-400` → `text-[#c4c5d6]`
+
+---
+
+### ملاحظات:
+- `tsc --noEmit` ✅ لا أخطاء
+- جميع أزرار الإجراءات في الجداول الآن 40px على الأقل
+- لا يوجد أي لون رمادي `gray-*` في الصفحات الرئيسية (بقيت فقط في قالب shadcn/ui الأساسي)
+
+---
+
+---
+
+## التاريخ: 2026-04-24 (الجزء السابع عشر — Re-check أخير)
+
+### التغيير: إصلاح أزرار TopBar (إشعارات/إعدادات/لغة)
+
+**الملف المُعدَّل:** `src/components/layout/TopBar.tsx`
+
+**المشكلة:** أزرار الإشعارات والإعدادات واللغة كانت `p-2` (~36px) — تحت الحد الأدنى 40px.
+
+**الحل:** `p-2` → `w-10 h-10 flex items-center justify-center` (40px).
+
+---
+
+### ملاحظات:
+- `tsc --noEmit` ✅ لا أخطاء
+- **الحالة النهائية: جميع أزرار التطبيق 40px على الأقل**
+
+---
+
+*لا يتم رفع أي تغييرات إلى GitHub إلا بأمر صريح من المستخدم.*
