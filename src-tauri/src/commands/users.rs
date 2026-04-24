@@ -32,7 +32,7 @@ pub fn login_user(pin: String, state: State<AppState>) -> Result<SessionToken, P
         // Check rate limiter before bcrypt verification
         state.rate_limiter.check(&id)?;
 
-        if verify(pin.trim(), &pin_hash).map_err(|_| PosError::InvalidCredentials)? {
+        if verify(pin.trim(), &pin_hash).map_err(|_| PosError::InvalidCredentials("خطأ في التحقق من الرمز".to_string()))? {
             // Success — clear failed attempts
             state.rate_limiter.record_success(&id);
 
@@ -78,7 +78,17 @@ pub fn login_user(pin: String, state: State<AppState>) -> Result<SessionToken, P
         }
     }
 
-    Err(PosError::InvalidCredentials)
+    // Get remaining attempts from the first user (they are all incremented together)
+    // If no users, fallback to 0
+    let remaining = conn.query_row("SELECT id FROM users WHERE is_active = 1 LIMIT 1", [], |row| {
+        let id: String = row.get(0)?;
+        Ok(state.rate_limiter.get_remaining_attempts(&id))
+    }).unwrap_or(0);
+
+    Err(PosError::InvalidCredentials(format!(
+        "الرمز السري غير صحيح. محاولات متبقية: {}",
+        remaining
+    )))
 }
 
 #[tauri::command]

@@ -129,6 +129,15 @@ impl RateLimiter {
         Ok(())
     }
 
+    pub fn get_remaining_attempts(&self, user_id: &str) -> u32 {
+        let store = match self.store.lock() {
+            Ok(s) => s,
+            Err(_) => return 5,
+        };
+        let attempts = store.get(user_id).map(|a| a.attempts).unwrap_or(0);
+        5_u32.saturating_sub(attempts)
+    }
+
     pub fn record_failure(&self, user_id: &str) {
         let mut store = match self.store.lock() {
             Ok(s) => s,

@@ -578,6 +578,19 @@ To be completed at the end of Phase 8 before the demo.
   - The app is now 100% desktop — no Vite dev server running at any point
 - **Build verified**: `cargo clippy -- -D warnings` passes; `pnpm run build` passes; `cargo build` passes
 
+### April 24, 2026 — Login Notification & Attempts Left Fix
+**Owner**: Antigravity
+**Duration**: 1 session
+**Deliverable achieved**: Yes
+**Notes**:
+- **Backend Fixes**:
+  - `error.rs`: Changed `PosError::InvalidCredentials` to a tuple variant `InvalidCredentials(String)` so it serializes with a message.
+  - `auth.rs`: Added `get_remaining_attempts` to `RateLimiter`.
+  - `users.rs`: Updated `login_user` to construct a friendly Arabic message including the remaining attempts.
+- **Frontend Fixes**:
+  - `useAuthStore.ts`: Removed unreachable attempt tracking logic in the `try` block. The store now correctly relies on the backend error message which is extracted via `extractErrorMessage`.
+- **Verification**: `cargo check` passed successfully.
+
 ---
 
 ## Upcoming Milestones

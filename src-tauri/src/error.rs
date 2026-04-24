@@ -10,7 +10,7 @@ pub enum PosError {
     /// Authentication / session failure
     AuthenticationError,
     /// PIN or credentials invalid
-    InvalidCredentials,
+    InvalidCredentials(String),
     /// Account locked due to too many failed attempts
     AccountLocked(String),
     /// Missing or invalid session token
@@ -32,7 +32,7 @@ impl std::fmt::Display for PosError {
         match self {
             PosError::DatabaseError => write!(f, "خطأ في قاعدة البيانات"),
             PosError::AuthenticationError => write!(f, "خطأ في المصادقة"),
-            PosError::InvalidCredentials => write!(f, "رقم التعريف غير صحيح"),
+            PosError::InvalidCredentials(msg) => write!(f, "{}", msg),
             PosError::AccountLocked(msg) => write!(f, "{}", msg),
             PosError::SessionExpired => write!(f, "لا يوجد جلسة نشطة"),
             PosError::Unauthorized => write!(f, "غير مصرح"),
