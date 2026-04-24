@@ -545,6 +545,22 @@ To be completed at the end of Phase 8 before the demo.
   - Added `get_users` and `delete_user` backend commands in `users.rs` (Admin/Manager role); registered in `main.rs`
 - **Note**: 7 pre-existing TS errors remain in `useScannerStatus.ts` and `CustomersPage.tsx` — unrelated to this sprint, caused by stale frontend type definitions.
 
+### April 24, 2026 — Post-Audit Fixes: Remaining TS Errors + Login Lockout Detection
+**Owner**: Dev B
+**Duration**: 1 session
+**Deliverable achieved**: Yes
+**Notes**:
+- **TS errors fixed**:
+  - `useScannerStatus.ts`: `checkScannerConnected()` returns `{ connected: boolean }` but code accessed `.deviceName`. Fixed by casting to typed object.
+  - `CustomersPage.tsx`: Destructured `addPayment` (doesn't exist) → changed to `recordPayment`.
+  - `CustomersPage.tsx`: `customer.nameEn` / `customer.address` missing from `Customer` type → added both as optional fields to `types/customer.ts`.
+  - `useCustomerStore.ts`: Added `selectedCustomer: Customer | null` and `selectCustomer` to `CustomerState` interface.
+  - All 7 TS errors resolved, build passes clean.
+- **Login lockout detection fix**:
+  - Problem: when backend `RateLimiter` was already locked (from prior attempt), catch block only called `extractErrorMessage` — it didn't detect `AccountLocked` type, so `isLocked` was never set to `true`.
+  - Fix: catch block in `login()` now checks `error.type === 'AccountLocked'` directly from the raw error object. If matched, sets `isLocked: true`, `failedAttempts: 5`, shows backend Arabic lockout message, and starts 5-minute countdown.
+  - Build: `✓ built in 700ms`
+
 ---
 
 ## Upcoming Milestones
