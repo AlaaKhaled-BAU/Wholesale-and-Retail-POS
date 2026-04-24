@@ -1,23 +1,18 @@
 use pos::{
     CashierSession, DailySales, DailySummary, InventoryReportRow, PaymentMethodBreakdown,
-    SessionReport, TopProduct,
+    PosError, SessionReport, TopProduct,
 };
 use pos::AppState;
 use rusqlite::params;
 use tauri::State;
 
-// ============================================================
-// Task 5.1.1 — get_daily_summary
-// ============================================================
 #[tauri::command]
 pub fn get_daily_summary(
     branch_id: String,
     date: String,
     state: State<AppState>,
-) -> Result<DailySummary, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-
-    // Main KPIs
+) -> Result<DailySummary, PosError> {
+    let conn = state.db.lock()?;
     let (invoice_count, total_sales, total_vat, grand_total): (i64, f64, f64, f64) = conn
         .query_row(
             "SELECT COUNT(*), COALESCE(SUM(subtotal), 0), COALESCE(SUM(vat_amount), 0), COALESCE(SUM(total), 0) \
@@ -26,8 +21,6 @@ pub fn get_daily_summary(
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .unwrap_or((0, 0.0, 0.0, 0.0));
-
-    // Payment method breakdown
     let cash: f64 = conn
         .query_row(
             "SELECT COALESCE(SUM(p.amount), 0) FROM payments p \
@@ -37,7 +30,6 @@ pub fn get_daily_summary(
             |row| row.get(0),
         )
         .unwrap_or(0.0);
-
     let card: f64 = conn
         .query_row(
             "SELECT COALESCE(SUM(p.amount), 0) FROM payments p \
@@ -47,7 +39,6 @@ pub fn get_daily_summary(
             |row| row.get(0),
         )
         .unwrap_or(0.0);
-
     let cliq: f64 = conn
         .query_row(
             "SELECT COALESCE(SUM(p.amount), 0) FROM payments p \
@@ -57,8 +48,6 @@ pub fn get_daily_summary(
             |row| row.get(0),
         )
         .unwrap_or(0.0);
-
-    // Top 5 products
     let mut stmt = conn
         .prepare(
             "SELECT il.product_name_ar, SUM(il.qty) as qty_sold, SUM(il.line_total) as revenue \
@@ -67,9 +56,7 @@ pub fn get_daily_summary(
              WHERE i.branch_id = ?1 AND DATE(i.created_at) = ?2 AND i.status != 'cancelled' \
              GROUP BY il.product_id \
              ORDER BY qty_sold DESC LIMIT 5",
-        )
-        .map_err(|e| e.to_string())?;
-
+        )?;
     let top_products: Vec<TopProduct> = stmt
         .query_map(params![&branch_id, &date], |row| {
             Ok(TopProduct {
@@ -78,9 +65,7 @@ pub fn get_daily_summary(
                 revenue: row.get(2)?,
             })
         })
-        .and_then(|rows| rows.collect())
-        .map_err(|e| e.to_string())?;
-
+        .and_then(|rows| rows.collect())?;
     Ok(DailySummary {
         date,
         invoice_count,
@@ -92,18 +77,14 @@ pub fn get_daily_summary(
     })
 }
 
-// ============================================================
-// Task 5.1.2 — get_sales_by_period
-// ============================================================
 #[tauri::command]
 pub fn get_sales_by_period(
     branch_id: String,
     from_date: String,
     to_date: String,
     state: State<AppState>,
-) -> Result<Vec<DailySales>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-
+) -> Result<Vec<DailySales>, PosError> {
+    let conn = state.db.lock()?;
     let mut stmt = conn
         .prepare(
             "SELECT DATE(created_at) as sale_date, COUNT(*) as invoice_count, \
@@ -112,9 +93,7 @@ pub fn get_sales_by_period(
              WHERE branch_id = ?1 AND DATE(created_at) BETWEEN ?2 AND ?3 AND status != 'cancelled' \
              GROUP BY DATE(created_at) \
              ORDER BY sale_date",
-        )
-        .map_err(|e| e.to_string())?;
-
+        )?;
     let sales: Vec<DailySales> = stmt
         .query_map(params![&branch_id, &from_date, &to_date], |row| {
             Ok(DailySales {
@@ -124,22 +103,16 @@ pub fn get_sales_by_period(
                 total_vat: row.get(3)?,
             })
         })
-        .and_then(|rows| rows.collect())
-        .map_err(|e| e.to_string())?;
-
+        .and_then(|rows| rows.collect())?;
     Ok(sales)
 }
 
-// ============================================================
-// Task 5.1.3 — get_inventory_report
-// ============================================================
 #[tauri::command]
 pub fn get_inventory_report(
     branch_id: String,
     state: State<AppState>,
-) -> Result<Vec<InventoryReportRow>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-
+) -> Result<Vec<InventoryReportRow>, PosError> {
+    let conn = state.db.lock()?;
     let mut stmt = conn
         .prepare(
             "SELECT p.id as product_id, p.name_ar, p.sku, i.qty_on_hand, i.low_stock_threshold, \
@@ -149,9 +122,7 @@ pub fn get_inventory_report(
              JOIN products p ON p.id = i.product_id \
              WHERE i.branch_id = ?1 \
              ORDER BY is_low_stock DESC, p.name_ar",
-        )
-        .map_err(|e| e.to_string())?;
-
+        )?;
     let rows: Vec<InventoryReportRow> = stmt
         .query_map(params![&branch_id], |row| {
             Ok(InventoryReportRow {
@@ -164,42 +135,38 @@ pub fn get_inventory_report(
                 is_low_stock: row.get(6)?,
             })
         })
-        .and_then(|rows| rows.collect())
-        .map_err(|e| e.to_string())?;
-
+        .and_then(|rows| rows.collect())?;
     Ok(rows)
 }
 
-// ============================================================
-// Task 5.1.4 — get_cashier_session_report
-// ============================================================
 #[tauri::command]
 pub fn get_cashier_session_report(
     session_id: String,
     state: State<AppState>,
-) -> Result<SessionReport, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-
+) -> Result<SessionReport, PosError> {
+    let conn = state.db.lock()?;
     let session: CashierSession = conn
         .query_row(
-            "SELECT id, user_id, branch_id, opened_at, closed_at, opening_float, closing_cash, status \
-             FROM cashier_sessions WHERE id = ?1",
+            "SELECT cs.id, cs.user_id, cs.branch_id, u.name_ar, u.role, cs.opened_at, cs.closed_at, cs.opening_float, cs.closing_cash, cs.status \
+             FROM cashier_sessions cs JOIN users u ON cs.user_id = u.id \
+             WHERE cs.id = ?1",
             [&session_id],
             |row| {
                 Ok(CashierSession {
                     id: row.get(0)?,
                     user_id: row.get(1)?,
                     branch_id: row.get(2)?,
-                    opened_at: row.get(3)?,
-                    closed_at: row.get(4)?,
-                    opening_float: row.get(5)?,
-                    closing_cash: row.get(6)?,
-                    status: row.get(7)?,
+                    user_name_ar: row.get(3)?,
+                    role: row.get(4)?,
+                    opened_at: row.get(5)?,
+                    closed_at: row.get(6)?,
+                    opening_float: row.get(7)?,
+                    closing_cash: row.get(8)?,
+                    status: row.get(9)?,
                 })
             },
         )
-        .map_err(|_| "المناوبة غير موجودة".to_string())?;
-
+        .map_err(|_| PosError::NotFound("المناوبة غير موجودة".to_string()))?;
     let (invoice_count, total_sales): (i64, f64) = conn
         .query_row(
             "SELECT COUNT(*), COALESCE(SUM(total), 0) FROM invoices WHERE session_id = ?1 AND status != 'cancelled'",
@@ -207,7 +174,6 @@ pub fn get_cashier_session_report(
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap_or((0, 0.0));
-
     let cash_sales: f64 = conn
         .query_row(
             "SELECT COALESCE(SUM(p.amount), 0) FROM payments p \
@@ -217,7 +183,6 @@ pub fn get_cashier_session_report(
             |row| row.get(0),
         )
         .unwrap_or(0.0);
-
     let card_sales: f64 = conn
         .query_row(
             "SELECT COALESCE(SUM(p.amount), 0) FROM payments p \
@@ -227,7 +192,6 @@ pub fn get_cashier_session_report(
             |row| row.get(0),
         )
         .unwrap_or(0.0);
-
     let cliq_sales: f64 = conn
         .query_row(
             "SELECT COALESCE(SUM(p.amount), 0) FROM payments p \
@@ -237,10 +201,8 @@ pub fn get_cashier_session_report(
             |row| row.get(0),
         )
         .unwrap_or(0.0);
-
     let expected_cash = session.opening_float + cash_sales;
     let discrepancy = session.closing_cash.unwrap_or(0.0) - expected_cash;
-
     Ok(SessionReport {
         session,
         invoice_count,
@@ -255,29 +217,22 @@ pub fn get_cashier_session_report(
     })
 }
 
-// ============================================================
-// Task 5.1.5 — export_invoices_csv
-// ============================================================
 #[tauri::command]
 pub fn export_invoices_csv(
     branch_id: String,
     from_date: String,
     to_date: String,
     state: State<AppState>,
-) -> Result<String, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-
+) -> Result<String, PosError> {
+    let conn = state.db.lock()?;
     let mut stmt = conn
         .prepare(
             "SELECT invoice_number, invoice_type, subtotal, vat_amount, total, created_at \
              FROM invoices \
              WHERE branch_id = ?1 AND DATE(created_at) BETWEEN ?2 AND ?3 AND status != 'cancelled' \
              ORDER BY created_at",
-        )
-        .map_err(|e| e.to_string())?;
-
+        )?;
     let mut csv = String::from("\u{FEFF}invoice_number,invoice_type,subtotal,vat_amount,total,created_at\n");
-
     let rows = stmt
         .query_map(params![&branch_id, &from_date, &to_date], |row| {
             Ok((
@@ -288,13 +243,10 @@ pub fn export_invoices_csv(
                 row.get::<_, f64>(4)?,
                 row.get::<_, String>(5)?,
             ))
-        })
-        .map_err(|e| e.to_string())?;
-
+        })?;
     for row in rows {
-        let (num, typ, sub, vat, total, created) = row.map_err(|e| e.to_string())?;
+        let (num, typ, sub, vat, total, created) = row?;
         csv.push_str(&format!("{},{},{:.2},{:.2},{:.2},{}\n", num, typ, sub, vat, total, created));
     }
-
     Ok(csv)
 }

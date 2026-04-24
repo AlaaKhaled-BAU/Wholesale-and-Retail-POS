@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useToast } from '../hooks/useToast';
 import { completeSetup } from '../lib/tauri-commands';
 
-export default function FirstRunSetupPage() {
+import ToastContainer from '../components/common/ToastContainer';
+
+export default function FirstRunSetupPage({ onComplete }: { onComplete?: () => void }) {
   const toast = useToast();
   const [step, setStep] = useState(1);
   const [branchNameAr, setBranchNameAr] = useState('');
@@ -31,7 +33,8 @@ export default function FirstRunSetupPage() {
         branchPrefix,
       });
       toast.success('تم إعداد النظام بنجاح');
-      window.location.reload();
+      if (onComplete) onComplete();
+      else window.location.reload();
     } catch (err: any) {
       toast.error(err?.message || 'فشل في إعداد النظام');
     } finally {
@@ -40,8 +43,10 @@ export default function FirstRunSetupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4" dir="rtl">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8">
+    <>
+      <ToastContainer />
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4" dir="rtl">
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8">
         <h1 className="text-2xl font-bold text-center mb-2">إعداد النظام لأول مرة</h1>
         <p className="text-gray-500 text-center mb-8">أكمل المعلومات التالية لبدء استخدام النظام</p>
 
@@ -150,5 +155,6 @@ export default function FirstRunSetupPage() {
         )}
       </div>
     </div>
+    </>
   );
 }

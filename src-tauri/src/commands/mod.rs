@@ -7,3 +7,4 @@ pub mod reports;
 pub mod zatca;
 pub mod printing;
 pub mod settings;
+pub mod backup;

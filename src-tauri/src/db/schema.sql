@@ -44,9 +44,9 @@ CREATE TABLE IF NOT EXISTS products (
   name_en      TEXT,
   category_id  TEXT REFERENCES categories(id),
   unit         TEXT DEFAULT 'piece',
-  cost_price   REAL DEFAULT 0,
-  sell_price   REAL NOT NULL,
-  vat_rate     REAL DEFAULT 0.15,
+  cost_price   REAL DEFAULT 0 CHECK(cost_price >= 0),
+  sell_price   REAL NOT NULL CHECK(sell_price >= 0),
+  vat_rate     REAL DEFAULT 0.15 CHECK(vat_rate >= 0),
   is_active    INTEGER DEFAULT 1,
   created_at   TEXT DEFAULT (datetime('now'))
 );
@@ -58,8 +58,8 @@ CREATE TABLE IF NOT EXISTS inventory (
   id                  TEXT PRIMARY KEY,
   branch_id           TEXT REFERENCES branches(id),
   product_id          TEXT REFERENCES products(id),
-  qty_on_hand         REAL DEFAULT 0,
-  low_stock_threshold REAL DEFAULT 5,
+  qty_on_hand         REAL DEFAULT 0 CHECK(qty_on_hand >= 0),
+  low_stock_threshold REAL DEFAULT 5 CHECK(low_stock_threshold >= 0),
   last_updated        TEXT DEFAULT (datetime('now')),
   UNIQUE(branch_id, product_id)
 );
@@ -73,8 +73,8 @@ CREATE TABLE IF NOT EXISTS customers (
   phone         TEXT,
   vat_number    TEXT,
   cr_number     TEXT,
-  credit_limit  REAL DEFAULT 0,
-  balance       REAL DEFAULT 0,
+  credit_limit  REAL DEFAULT 0 CHECK(credit_limit >= 0),
+  balance       REAL DEFAULT 0 CHECK(balance >= 0),
   customer_type TEXT DEFAULT 'b2c' CHECK(customer_type IN ('b2c', 'b2b')),
   created_at    TEXT DEFAULT (datetime('now'))
 );
@@ -88,8 +88,8 @@ CREATE TABLE IF NOT EXISTS cashier_sessions (
   branch_id      TEXT REFERENCES branches(id),
   opened_at      TEXT NOT NULL,
   closed_at      TEXT,
-  opening_float  REAL DEFAULT 0,
-  closing_cash   REAL,
+  opening_float  REAL DEFAULT 0 CHECK(opening_float >= 0),
+  closing_cash   REAL CHECK(closing_cash IS NULL OR closing_cash >= 0),
   status         TEXT DEFAULT 'open' CHECK(status IN ('open','closed'))
 );
 
@@ -106,10 +106,10 @@ CREATE TABLE IF NOT EXISTS invoices (
   invoice_number   TEXT UNIQUE NOT NULL,
   invoice_type     TEXT DEFAULT 'simplified' CHECK(invoice_type IN ('simplified','standard','credit_note')),
   status           TEXT DEFAULT 'draft' CHECK(status IN ('draft','confirmed','cancelled')),
-  subtotal         REAL NOT NULL,
-  discount_amount  REAL DEFAULT 0,
-  vat_amount       REAL NOT NULL,
-  total            REAL NOT NULL,
+  subtotal         REAL NOT NULL CHECK(subtotal >= 0),
+  discount_amount  REAL DEFAULT 0 CHECK(discount_amount >= 0),
+  vat_amount       REAL NOT NULL CHECK(vat_amount >= 0),
+  total            REAL NOT NULL CHECK(total >= 0),
   payment_method   TEXT,
   notes            TEXT,
   invoice_hash     TEXT,
@@ -127,12 +127,12 @@ CREATE TABLE IF NOT EXISTS invoice_lines (
   invoice_id       TEXT REFERENCES invoices(id),
   product_id       TEXT REFERENCES products(id),
   product_name_ar  TEXT NOT NULL,
-  qty              REAL NOT NULL,
-  unit_price       REAL NOT NULL,
-  discount_pct     REAL DEFAULT 0,
-  vat_rate         REAL DEFAULT 0.15,
-  vat_amount       REAL NOT NULL,
-  line_total       REAL NOT NULL
+  qty              REAL NOT NULL CHECK(qty != 0),
+  unit_price       REAL NOT NULL CHECK(unit_price >= 0),
+  discount_pct     REAL DEFAULT 0 CHECK(discount_pct >= 0 AND discount_pct <= 100),
+  vat_rate         REAL DEFAULT 0.15 CHECK(vat_rate >= 0),
+  vat_amount       REAL NOT NULL CHECK(vat_amount >= 0),
+  line_total       REAL NOT NULL CHECK(line_total >= 0)
 );
 
 -- ========================================
@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS payments (
   id          TEXT PRIMARY KEY,
   invoice_id  TEXT REFERENCES invoices(id),
   method      TEXT NOT NULL CHECK(method IN ('cash','card','cliq')),
-  amount      REAL NOT NULL,
+  amount      REAL NOT NULL CHECK(amount > 0),
   reference   TEXT,
   paid_at     TEXT DEFAULT (datetime('now'))
 );
@@ -176,9 +176,17 @@ CREATE TABLE IF NOT EXISTS zatca_queue (
   id          TEXT PRIMARY KEY,
   invoice_id  TEXT REFERENCES invoices(id),
   queued_at   TEXT DEFAULT (datetime('now')),
-  attempts    INTEGER DEFAULT 0,
+  attempts    INTEGER DEFAULT 0 CHECK(attempts >= 0),
   last_error  TEXT,
   urgent      INTEGER DEFAULT 0
+);
+
+-- ========================================
+-- Invoice Counters (atomic numbering)
+-- ========================================
+CREATE TABLE IF NOT EXISTS invoice_counters (
+  branch_id    TEXT PRIMARY KEY REFERENCES branches(id),
+  last_number  INTEGER DEFAULT 0
 );
 
 -- ========================================

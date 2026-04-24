@@ -1,25 +1,21 @@
-use pos::AppSettings;
+use pos::{AppSettings, PosError};
 use pos::AppState;
 use rusqlite::OptionalExtension;
 use rusqlite::params;
 use tauri::State;
+use bcrypt::{hash, DEFAULT_COST};
+use uuid::Uuid;
 
-// ============================================================
-// Task 7.1.1 — get_setting + set_setting
-// ============================================================
 #[tauri::command]
-pub fn get_setting(key: String, state: State<AppState>) -> Result<Option<String>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-
+pub fn get_setting(key: String, state: State<AppState>) -> Result<Option<String>, PosError> {
+    let conn = state.db.lock()?;
     let value: Option<String> = conn
         .query_row(
             "SELECT value FROM settings WHERE key = ?1",
             [&key],
             |row| row.get(0),
         )
-        .optional()
-        .map_err(|e| e.to_string())?;
-
+        .optional()?;
     Ok(value)
 }
 
@@ -28,17 +24,13 @@ pub fn set_setting(
     key: String,
     value: String,
     state: State<AppState>,
-) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-
+) -> Result<(), PosError> {
+    let conn = state.db.lock()?;
     conn.execute(
         "INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, datetime('now')) \
          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
         params![&key, &value],
-    )
-    .map_err(|e| e.to_string())?;
-
-    // Update cached settings in AppState if present
+    )?;
     if let Ok(mut cached) = state.settings.lock() {
         if let Some(ref mut settings) = *cached {
             match key.as_str() {
@@ -53,30 +45,19 @@ pub fn set_setting(
             }
         }
     }
-
     Ok(())
 }
 
-// ============================================================
-// Task 7.1.2 — get_all_settings
-// ============================================================
-pub fn get_all_settings_inner(conn: &rusqlite::Connection) -> Result<AppSettings, String> {
-    let mut stmt = conn
-        .prepare("SELECT key, value FROM settings")
-        .map_err(|e| e.to_string())?;
-
-    let rows = stmt
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
-        .map_err(|e| e.to_string())?;
-
+pub fn get_all_settings_inner(conn: &rusqlite::Connection) -> Result<AppSettings, PosError> {
+    let mut stmt = conn.prepare("SELECT key, value FROM settings")?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
     let mut map = std::collections::HashMap::new();
     for row in rows {
-        let (k, v) = row.map_err(|e| e.to_string())?;
+        let (k, v) = row?;
         map.insert(k, v);
     }
-
     Ok(AppSettings {
         vat_rate: map.get("vat_rate").cloned().unwrap_or_else(|| "0.15".to_string()),
         printer_port: map.get("printer_port").cloned().unwrap_or_default(),
@@ -98,26 +79,88 @@ pub fn get_all_settings_inner(conn: &rusqlite::Connection) -> Result<AppSettings
 }
 
 #[tauri::command]
-pub fn get_all_settings(state: State<AppState>) -> Result<AppSettings, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+pub fn get_all_settings(state: State<AppState>) -> Result<AppSettings, PosError> {
+    let conn = state.db.lock()?;
     get_all_settings_inner(&conn)
 }
 
-// ============================================================
-// Task 8.1.2 — seed_demo_data (debug builds only)
-// ============================================================
 #[tauri::command]
-pub async fn seed_demo_data(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn seed_demo_data(state: State<'_, AppState>) -> Result<(), PosError> {
     #[cfg(debug_assertions)]
     {
-        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        let conn = state.db.lock()?;
         let sql = include_str!("../db/seed_demo.sql");
-        conn.execute_batch(sql).map_err(|e| e.to_string())?;
+        conn.execute_batch(sql)?;
         Ok(())
     }
-
     #[cfg(not(debug_assertions))]
     {
-        Err("غير مسموح في الإصدار النهائي".to_string())
+        Err(PosError::BusinessRule("غير مسموح في الإصدار النهائي".to_string()))
     }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupPayload {
+    branch_name_ar: String,
+    vat_number: Option<String>,
+    cr_number: Option<String>,
+    address: Option<String>,
+    admin_name: String,
+    admin_pin: String,
+    #[allow(dead_code)]
+    branch_prefix: String,
+}
+
+#[tauri::command]
+pub fn complete_setup(
+    payload: SetupPayload,
+    state: State<AppState>,
+) -> Result<(), PosError> {
+    let conn = state.db.lock()?;
+    let already_setup: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'setup_complete'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if already_setup.is_some() {
+        return Err(PosError::BusinessRule("النظام sudah diatur".to_string()));
+    }
+    let branch_id = format!("BR-{}", Uuid::new_v4());
+    conn.execute(
+        "INSERT INTO branches (id, name_ar, vat_number, cr_number, address) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![&branch_id, &payload.branch_name_ar, &payload.vat_number, &payload.cr_number, &payload.address],
+    )?;
+    let pin_hash = hash(&payload.admin_pin, DEFAULT_COST)
+        .map_err(|_| PosError::InternalError)?;
+    let user_id = format!("USR-{}", Uuid::new_v4());
+    conn.execute(
+        "INSERT INTO users (id, branch_id, name_ar, role, pin_hash, is_active) VALUES (?1, ?2, ?3, 'admin', ?4, 1)",
+        params![&user_id, &branch_id, &payload.admin_name, &pin_hash],
+    )?;
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES ('setup_complete', 'true')",
+        [],
+    )?;
+    let default_settings = [
+        ("vat_rate", "0.15"),
+        ("printer_type", "usb"),
+        ("branch_name_ar", &payload.branch_name_ar),
+        ("invoice_note", "شكراً لزيارتكم — يُرجى الاحتفاظ بالفاتورة"),
+        ("numerals", "western"),
+        ("auto_lock_minutes", "5"),
+    ];
+    for (key, value) in default_settings {
+        conn.execute(
+            "INSERT OR IGNORE INTO settings (key, value) VALUES (?1, ?2)",
+            params![key, value],
+        )?;
+    }
+    if let Ok(mut cached) = state.settings.lock() {
+        *cached = get_all_settings_inner(&conn).ok();
+    }
+    log::info!(target: "pos::setup", "First-time setup completed for branch={}", payload.branch_name_ar);
+    Ok(())
 }

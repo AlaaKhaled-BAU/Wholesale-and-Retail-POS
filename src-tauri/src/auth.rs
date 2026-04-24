@@ -1,9 +1,58 @@
 use crate::{AppState, SessionToken};
 use crate::error::PosError;
+use rusqlite::params;
+use rusqlite::OptionalExtension;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::State;
+
+pub fn validate_session(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+    cashier_id: &str,
+) -> Result<(), PosError> {
+    let row: Option<(String, String)> = conn
+        .query_row(
+            "SELECT cs.id, u.role FROM cashier_sessions cs JOIN users u ON cs.user_id = u.id \
+             WHERE cs.id = ?1 AND cs.user_id = ?2 AND cs.status = 'open'",
+            params![session_id, cashier_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|_| PosError::InternalError)?;
+
+    match row {
+        Some(_) => Ok(()),
+        None => Err(PosError::SessionExpired),
+    }
+}
+
+pub fn require_role_db(
+    conn: &rusqlite::Connection,
+    cashier_id: &str,
+    required: &[Role],
+) -> Result<String, PosError> {
+    let role: String = conn
+        .query_row(
+            "SELECT role FROM users WHERE id = ?1 AND is_active = 1",
+            params![cashier_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| PosError::Unauthorized)?;
+
+    let has_role = required.iter().any(|r| match r {
+        Role::Admin => role == "admin",
+        Role::Manager => role == "manager" || role == "admin",
+        Role::Cashier => role == "cashier" || role == "manager" || role == "admin",
+    });
+
+    if !has_role {
+        return Err(PosError::Unauthorized);
+    }
+
+    Ok(role)
+}
 
 // ============================================================
 // RBAC Middleware
@@ -42,7 +91,13 @@ pub fn require_role(
         return Err(PosError::Unauthorized);
     }
 
-    Ok(session.clone())
+    Ok(SessionToken {
+        user_id: session.user_id.clone(),
+        name_ar: session.user_name_ar.clone(),
+        role: session.role.clone(),
+        branch_id: session.branch_id.clone(),
+        session_id: session.id.clone(),
+    })
 }
 
 pub fn require_session(state: &State<AppState>) -> Result<SessionToken, PosError> {
@@ -55,7 +110,13 @@ pub fn require_session(state: &State<AppState>) -> Result<SessionToken, PosError
         .as_ref()
         .ok_or(PosError::SessionExpired)?;
 
-    Ok(session.clone())
+    Ok(SessionToken {
+        user_id: session.user_id.clone(),
+        name_ar: session.user_name_ar.clone(),
+        role: session.role.clone(),
+        branch_id: session.branch_id.clone(),
+        session_id: session.id.clone(),
+    })
 }
 
 pub fn require_session_or_user_id(

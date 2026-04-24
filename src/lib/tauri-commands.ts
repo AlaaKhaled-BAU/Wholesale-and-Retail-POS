@@ -11,6 +11,7 @@
 // ============================================================
 
 import { invoke } from '@tauri-apps/api/core';
+import { useAuthStore } from '../store/useAuthStore';
 import type {
   Product,
   ProductInput,
@@ -78,6 +79,8 @@ export const getProductByBarcode = (barcode: string) =>
   invoke<Product | null>('get_product_by_barcode', { barcode, branchId: DEFAULT_BRANCH_ID });
 
 export const createProduct = (product: ProductInput) => {
+  const { user, session } = useAuthStore.getState();
+  if (!user?.id || !session?.token) throw new Error('No active session');
   const payload = {
     sku: product.barcode,
     barcode: product.barcode,
@@ -89,10 +92,12 @@ export const createProduct = (product: ProductInput) => {
     sellPrice: product.sellPrice,
     vatRate: product.vatRate,
   };
-  return invoke<Product>('create_product', { product: payload, branchId: DEFAULT_BRANCH_ID });
+  return invoke<Product>('create_product', { product: payload, branchId: DEFAULT_BRANCH_ID, cashierId: user.id, sessionId: session.token });
 };
 
 export const updateProduct = (id: string, product: ProductInput) => {
+  const { user, session } = useAuthStore.getState();
+  if (!user?.id || !session?.token) throw new Error('No active session');
   const payload = {
     sku: product.barcode,
     barcode: product.barcode,
@@ -104,14 +109,23 @@ export const updateProduct = (id: string, product: ProductInput) => {
     sellPrice: product.sellPrice,
     vatRate: product.vatRate,
   };
-  return invoke<Product>('update_product', { id, product: payload, branchId: DEFAULT_BRANCH_ID });
+  return invoke<Product>('update_product', { id, product: payload, branchId: DEFAULT_BRANCH_ID, cashierId: user.id, sessionId: session.token });
 };
 
-export const toggleProductActive = (id: string) =>
-  invoke<void>('toggle_product_active', { id });
+export const toggleProductActive = (id: string) => {
+  const { user, session } = useAuthStore.getState();
+  if (!user?.id || !session?.token) throw new Error('No active session');
+  return invoke<void>('toggle_product_active', { id, cashierId: user.id, sessionId: session.token });
+};
 
 export const getCategories = () =>
   invoke<Category[]>('get_categories');
+
+export const createCategory = (nameAr: string, nameEn?: string) => {
+  const { user, session } = useAuthStore.getState();
+  if (!user?.id || !session?.token) throw new Error('No active session');
+  return invoke<Category>('create_category', { nameAr, nameEn, cashierId: user.id, sessionId: session.token });
+};
 
 // ============================================================
 // Inventory
@@ -123,8 +137,11 @@ export const getInventory = () =>
 export const getInventoryReport = () =>
   invoke<InventoryReportRow[]>('get_inventory_report', { branchId: DEFAULT_BRANCH_ID });
 
-export const adjustInventory = (productId: string, newQty: number, reason: string, userId: string) =>
-  invoke<void>('adjust_inventory', { branchId: DEFAULT_BRANCH_ID, productId, newQty, reason, userId });
+export const adjustInventory = (productId: string, newQty: number, reason: string, _userId?: string) => {
+  const { user, session } = useAuthStore.getState();
+  if (!user?.id || !session?.token) throw new Error('No active session');
+  return invoke<void>('adjust_inventory', { branchId: DEFAULT_BRANCH_ID, productId, newQty, reason, cashierId: user.id, sessionId: session.token });
+};
 
 // ============================================================
 // Customers
@@ -157,8 +174,12 @@ export const updateCustomer = (id: string, customer: CustomerInput) => {
   return invoke<Customer>('update_customer', { id, data: payload });
 };
 
-export const addCustomerPayment = (customerId: string, amount: number, userId = 'USR-002') =>
-  invoke<void>('record_customer_payment', { customerId, amount, userId });
+export const addCustomerPayment = (customerId: string, amount: number, userId?: string) => {
+  const { user } = useAuthStore.getState();
+  const actualUserId = userId ?? user?.id;
+  if (!actualUserId) throw new Error('No authenticated user');
+  return invoke<void>('record_customer_payment', { customerId, amount, userId: actualUserId });
+};
 
 export const getCustomerInvoices = (customerId: string) =>
   invoke<Invoice[]>('get_customer_invoices', { customerId });
@@ -206,11 +227,12 @@ function paymentDetailsToPayments(details: CartData['paymentDetails'], grandTota
 }
 
 export const createInvoice = async (cartData: CartData): Promise<Invoice> => {
-  // Get current session from localStorage or auth store
-  const sessionJson = localStorage.getItem('pos-session');
-  const session = sessionJson ? JSON.parse(sessionJson) : null;
-  const sessionId = session?.sessionId || 'SES-002';
-  const cashierId = session?.user?.id || 'USR-002';
+  const { user, session } = useAuthStore.getState();
+  if (!user?.id || !session?.token) {
+    throw new Error('No active session. Please log in.');
+  }
+  const sessionId = session.token;
+  const cashierId = user.id;
 
   const lines = cartData.items.map(cartItemToNewLine);
   const payments = paymentDetailsToPayments(cartData.paymentDetails, cartData.grandTotal);
@@ -300,10 +322,10 @@ export const setSetting = (key: string, value: string) =>
 // ============================================================
 
 export const printReceipt = (invoiceId: string) =>
-  invoke<boolean>('print_receipt', { invoiceId }).then(() => true).catch(() => false);
+  invoke<void>('print_receipt', { invoiceId });
 
 export const printTestPage = () =>
-  invoke<boolean>('print_test_page').then(() => true).catch(() => false);
+  invoke<void>('print_test_page');
 
 export const getAvailablePorts = () =>
   invoke<string[]>('get_available_ports');
@@ -334,3 +356,20 @@ export const retryZatcaQueue = () =>
 
 export const seedDemoData = () =>
   invoke<void>('seed_demo_data');
+
+// ============================================================
+// First-Run Setup
+// ============================================================
+
+interface SetupPayload {
+  branchNameAr: string;
+  vatNumber?: string;
+  crNumber?: string;
+  address?: string;
+  adminName: string;
+  adminPin: string;
+  branchPrefix: string;
+}
+
+export const completeSetup = (payload: SetupPayload) =>
+  invoke<void>('complete_setup', { payload });

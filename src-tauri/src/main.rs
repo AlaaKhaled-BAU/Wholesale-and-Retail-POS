@@ -3,6 +3,7 @@
 mod commands;
 mod db;
 
+use futures_util::future::FutureExt;
 use tauri::Manager;
 
 fn main() {
@@ -18,29 +19,48 @@ fn main() {
                 .expect("could not get app data dir");
             std::fs::create_dir_all(&app_dir)
                 .expect("could not create app data dir");
+
+            // Initialize structured logging
+            if let Err(e) = pos::logging::setup_logging(&app_dir) {
+                eprintln!("Failed to initialize logging: {}", e);
+            }
+
+            log::info!("POS application starting...");
+
             let db_path = app_dir.join("pos.db");
 
             let conn = rusqlite::Connection::open(&db_path)
                 .expect("could not open database");
 
-            // Enable foreign key enforcement (CRITICAL for data integrity)
-            conn.execute("PRAGMA foreign_keys = ON", [])
-                .expect("could not enable foreign keys");
+            // Enable WAL mode for better concurrency and crash recovery
+            conn.execute_batch(
+                "PRAGMA journal_mode = WAL;
+                 PRAGMA synchronous = NORMAL;
+                 PRAGMA busy_timeout = 5000;
+                 PRAGMA foreign_keys = ON;
+                 PRAGMA temp_store = MEMORY;
+                 PRAGMA mmap_size = 268435456;",
+            )
+            .expect("could not configure SQLite PRAGMAs");
 
             // Run schema as safety net
             let schema = include_str!("db/schema.sql");
             conn.execute_batch(schema)
                 .expect("could not run schema");
 
-            // Seed if empty
-            if let Err(e) = db::seed_if_empty(&conn) {
-                eprintln!("Seed error: {}", e);
+            // Seed if empty (debug builds only — removes hardcoded PINs from production)
+            #[cfg(debug_assertions)]
+            {
+                if let Err(e) = db::seed_if_empty(&conn) {
+                    log::error!("Seed error: {}", e);
+                }
             }
 
             app.manage(pos::AppState {
                 db: std::sync::Mutex::new(conn),
                 current_session: std::sync::Mutex::new(None),
                 settings: std::sync::Mutex::new(None),
+                rate_limiter: pos::auth::RateLimiter::new(),
             });
 
             // Load settings into AppState cache
@@ -54,18 +74,38 @@ fn main() {
                 }
             }
 
-            // ZATCA retry queue background task (every 10 minutes)
+            // ZATCA retry queue background task (every 10 minutes) with panic recovery
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(600));
                 loop {
                     interval.tick().await;
                     if let Some(state) = handle.try_state::<pos::AppState>() {
-                        commands::zatca::process_zatca_retry_queue(&*state).await;
+                        let result = std::panic::AssertUnwindSafe(
+                            commands::zatca::process_zatca_retry_queue(&*state)
+                        ).catch_unwind().await;
+                        if let Err(panic_err) = result {
+                            log::error!("ZATCA queue processor panicked: {:?}", panic_err);
+                        }
                     }
                 }
             });
 
+            // Daily database backup task (every 24 hours)
+            let backup_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // Wait 1 hour after startup before first backup
+                tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
+                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(86400));
+                loop {
+                    interval.tick().await;
+                    if let Some(state) = backup_handle.try_state::<pos::AppState>() {
+                        commands::backup::run_daily_backup(&*state);
+                    }
+                }
+            });
+
+            log::info!("POS application initialized successfully");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -118,8 +158,11 @@ fn main() {
             commands::settings::get_setting,
             commands::settings::set_setting,
             commands::settings::get_all_settings,
+            commands::settings::complete_setup,
             // Demo (Phase 8)
             commands::settings::seed_demo_data,
+            // Backup
+            commands::backup::backup_database,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

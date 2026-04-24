@@ -1,4 +1,4 @@
-use pos::{Customer, Invoice, NewCustomer};
+use pos::{Customer, Invoice, NewCustomer, PosError};
 use pos::AppState;
 use rusqlite::params;
 use tauri::State;
@@ -44,43 +44,30 @@ fn map_invoice_row_short(row: &rusqlite::Row) -> Result<Invoice, rusqlite::Error
     })
 }
 
-// ============================================================
-// Task 4.1.1 — get_customers
-// ============================================================
 #[tauri::command]
-pub fn get_customers(query: String, state: State<AppState>) -> Result<Vec<Customer>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-
+pub fn get_customers(query: String, state: State<AppState>) -> Result<Vec<Customer>, PosError> {
+    let conn = state.db.lock()?;
     let mut stmt = conn
         .prepare(
             "SELECT id, name_ar, phone, vat_number, cr_number, credit_limit, balance, customer_type, created_at \
              FROM customers \
              WHERE name_ar LIKE '%' || ?1 || '%' OR phone = ?2 OR vat_number = ?3 \
              ORDER BY name_ar LIMIT 50",
-        )
-        .map_err(|e| e.to_string())?;
-
+        )?;
     let customers = stmt
         .query_map(params![&query, &query, &query], map_customer_row)
-        .and_then(|rows| rows.collect())
-        .map_err(|e| e.to_string())?;
-
+        .and_then(|rows| rows.collect())?;
     Ok(customers)
 }
 
-// ============================================================
-// Task 4.1.2 — create_customer
-// ============================================================
 #[tauri::command]
 pub fn create_customer(
     customer: NewCustomer,
     state: State<AppState>,
-) -> Result<Customer, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-
+) -> Result<Customer, PosError> {
+    let conn = state.db.lock()?;
     let id = format!("CUS-{}", Uuid::new_v4());
     let credit_limit = customer.credit_limit.unwrap_or(0.0);
-
     conn.execute(
         "INSERT INTO customers (id, name_ar, phone, vat_number, cr_number, credit_limit, balance, customer_type) \
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7)",
@@ -93,9 +80,7 @@ pub fn create_customer(
             &credit_limit,
             &customer.customer_type,
         ],
-    )
-    .map_err(|e| e.to_string())?;
-
+    )?;
     Ok(Customer {
         id,
         name_ar: customer.name_ar,
@@ -109,17 +94,13 @@ pub fn create_customer(
     })
 }
 
-// ============================================================
-// Task 4.1.3 — update_customer
-// ============================================================
 #[tauri::command]
 pub fn update_customer(
     id: String,
     data: NewCustomer,
     state: State<AppState>,
-) -> Result<Customer, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-
+) -> Result<Customer, PosError> {
+    let conn = state.db.lock()?;
     conn.execute(
         "UPDATE customers SET name_ar = ?1, phone = ?2, vat_number = ?3, cr_number = ?4, \
          credit_limit = ?5, customer_type = ?6 WHERE id = ?7",
@@ -132,9 +113,7 @@ pub fn update_customer(
             &data.customer_type,
             &id,
         ],
-    )
-    .map_err(|e| e.to_string())?;
-
+    )?;
     let updated = conn
         .query_row(
             "SELECT id, name_ar, phone, vat_number, cr_number, credit_limit, balance, customer_type, created_at \
@@ -142,21 +121,16 @@ pub fn update_customer(
             [&id],
             map_customer_row,
         )
-        .map_err(|_| "العميل غير موجود".to_string())?;
-
+        .map_err(|_| PosError::NotFound("العميل غير موجود".to_string()))?;
     Ok(updated)
 }
 
-// ============================================================
-// Task 4.1.4 — get_customer_invoices + get_customer_balance
-// ============================================================
 #[tauri::command]
 pub fn get_customer_invoices(
     customer_id: String,
     state: State<AppState>,
-) -> Result<Vec<Invoice>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-
+) -> Result<Vec<Invoice>, PosError> {
+    let conn = state.db.lock()?;
     let mut stmt = conn
         .prepare(
             "SELECT id, uuid, branch_id, session_id, cashier_id, customer_id, invoice_number, \
@@ -165,14 +139,10 @@ pub fn get_customer_invoices(
              FROM invoices \
              WHERE customer_id = ?1 \
              ORDER BY created_at DESC LIMIT 50",
-        )
-        .map_err(|e| e.to_string())?;
-
+        )?;
     let invoices = stmt
         .query_map([&customer_id], map_invoice_row_short)
-        .and_then(|rows| rows.collect())
-        .map_err(|e| e.to_string())?;
-
+        .and_then(|rows| rows.collect())?;
     Ok(invoices)
 }
 
@@ -180,9 +150,8 @@ pub fn get_customer_invoices(
 pub fn get_customer_balance(
     customer_id: String,
     state: State<AppState>,
-) -> Result<f64, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-
+) -> Result<f64, PosError> {
+    let conn = state.db.lock()?;
     let balance: f64 = conn
         .query_row(
             "SELECT COALESCE(SUM(total), 0) FROM invoices WHERE customer_id = ?1 AND status != 'cancelled'",
@@ -190,30 +159,21 @@ pub fn get_customer_balance(
             |row| row.get(0),
         )
         .unwrap_or(0.0);
-
     Ok(balance)
 }
 
-// ============================================================
-// Task 4.1.5 — record_customer_payment
-// ============================================================
 #[tauri::command]
 pub fn record_customer_payment(
     customer_id: String,
     amount: f64,
     user_id: String,
     state: State<AppState>,
-) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-
-    // Update customer balance
+) -> Result<(), PosError> {
+    let conn = state.db.lock()?;
     conn.execute(
         "UPDATE customers SET balance = balance - ?1 WHERE id = ?2",
         params![&amount, &customer_id],
-    )
-    .map_err(|e| e.to_string())?;
-
-    // Audit log
+    )?;
     conn.execute(
         "INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, payload) \
          VALUES (?1, ?2, 'settings_changed', 'customer', ?3, ?4)",
@@ -223,8 +183,6 @@ pub fn record_customer_payment(
             &customer_id,
             format!("{{\"payment_amount\":{}}}", amount),
         ],
-    )
-    .map_err(|e| e.to_string())?;
-
+    )?;
     Ok(())
 }

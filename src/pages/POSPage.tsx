@@ -9,9 +9,11 @@ import { useProductStore } from '../store/useProductStore';
 import { useCustomerStore } from '../store/useCustomerStore';
 import { useInvoiceStore } from '../store/useInvoiceStore';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { useAuthStore } from '../store/useAuthStore';
 import { useToast } from '../hooks/useToast';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { cn } from '../lib/utils';
+import { getInvoice, createRefundInvoice, printReceipt } from '../lib/tauri-commands';
 
 /* Category icons mapping */
 const categoryIcons: Record<string, React.ElementType> = {
@@ -236,12 +238,12 @@ export default function POSPage() {
     setIsPrintingReceipt(true);
     setPrintError(false);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await printReceipt(lastInvoice.id);
       toast.success('تم إرسال الإيصال للطباعة');
       setPrintError(false);
-    } catch (error) {
+    } catch (error: any) {
       setPrintError(true);
-      toast.error('فشل في الطباعة — اضغط إعادة المحاولة');
+      toast.error(error?.message || 'فشل في الطباعة — تأكد من توصيل الطابعة');
     } finally {
       setIsPrintingReceipt(false);
     }
@@ -258,16 +260,34 @@ export default function POSPage() {
   const handleSearchInvoiceForRefund = async () => {
     if (!refundInvoiceNumber.trim()) return;
     setIsSearchingInvoice(true);
-    setTimeout(() => {
+    try {
+      const invoice = await getInvoice(refundInvoiceNumber.trim());
+      if (!invoice) {
+        toast.error('الفاتورة غير موجودة');
+        setIsSearchingInvoice(false);
+        return;
+      }
+      if (!invoice.lines || invoice.lines.length === 0) {
+        toast.error('الفاتورة لا تحتوي على أصناف');
+        setIsSearchingInvoice(false);
+        return;
+      }
       setRefundInvoice({
-        id: 'inv-123', invoiceNumber: refundInvoiceNumber,
-        lines: [
-          { productId: '1', name: 'تفاح أحمر', qty: 5, unitPrice: 15.00, selectedQty: 0 },
-          { productId: '2', name: 'موز', qty: 3, unitPrice: 8.50, selectedQty: 0 },
-        ],
+        id: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        lines: invoice.lines.map((l: any) => ({
+          productId: l.productId,
+          name: l.productNameAr,
+          qty: l.qty,
+          unitPrice: l.unitPrice,
+          selectedQty: 0,
+        })),
       });
+    } catch (err: any) {
+      toast.error(err?.message || 'فشل في البحث عن الفاتورة');
+    } finally {
       setIsSearchingInvoice(false);
-    }, 500);
+    }
   };
 
   const handleRefundQtyChange = (productId: string, qty: number) => {
@@ -285,12 +305,21 @@ export default function POSPage() {
     setShowRefundConfirm(true);
   };
 
-  const confirmRefund = () => {
-    toast.success('تم معالجة الإرجاع بنجاح');
-    setRefundInvoice(null); setRefundInvoiceNumber(''); setIsRefundMode(false); setShowRefundConfirm(false);
+  const confirmRefund = async () => {
+    if (!refundInvoice) return;
+    const selectedLines = refundInvoice.lines.filter((l) => l.selectedQty > 0);
+    if (selectedLines.length === 0) { toast.warning('يرجى اختيار منتجات للإرجاع'); return; }
+    try {
+      const refundLines = selectedLines.map((l) => ({ productId: l.productId, qty: l.selectedQty }));
+      await createRefundInvoice(refundInvoice.id, refundLines);
+      toast.success('تم معالجة الإرجاع بنجاح');
+      setRefundInvoice(null); setRefundInvoiceNumber(''); setIsRefundMode(false); setShowRefundConfirm(false);
+    } catch (err: any) {
+      toast.error(err?.message || 'فشل في معالجة الإرجاع');
+    }
   };
 
-  const handleNumpadInput = (val: string) => {
+  const handleNumpadInput = useCallback((val: string) => {
     if (activePaymentInput === 'cash') {
       if (val === 'backspace') setCashAmount(prev => prev.slice(0, -1));
       else setCashAmount(prev => prev + val);
@@ -298,7 +327,27 @@ export default function POSPage() {
       if (val === 'backspace') setCardAmount(prev => prev.slice(0, -1));
       else setCardAmount(prev => prev + val);
     }
-  };
+  }, [activePaymentInput]);
+
+  useEffect(() => {
+    if (!showPaymentModal) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        handleNumpadInput(e.key);
+      } else if (e.key === '.' || e.key === 'Decimal') {
+        e.preventDefault();
+        handleNumpadInput('.');
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handleNumpadInput('backspace');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showPaymentModal, handleNumpadInput]);
 
   /* Payment method labels */
   const paymentLabels: Record<string, string> = { cash: 'نقدي', card: 'فيزا', cliq: 'CLIQ', mixed: 'فيزا + نقدي' };
@@ -825,10 +874,20 @@ export default function POSPage() {
               {/* QR Placeholder */}
               <div className="bg-[#f4f2fd] rounded-lg p-4 text-center mt-4">
                 <div className="text-sm text-[#747685] mb-2">رمز الاستجابة السريعة (ZATCA QR)</div>
-                <div className="w-32 h-32 bg-[#e2e1ec] rounded-lg mx-auto flex items-center justify-center">
-                  <span className="text-[#747685] text-xs">QR placeholder</span>
-                </div>
-                <p className="text-xs text-[#747685] mt-2">سيتم إنشاء QR بواسطة Dev B</p>
+                {lastInvoice.qrCode ? (
+                  <img
+                    src={`data:image/png;base64,${lastInvoice.qrCode}`}
+                    alt="ZATCA QR"
+                    className="w-32 h-32 mx-auto rounded-lg"
+                  />
+                ) : (
+                  <div className="w-32 h-32 bg-[#e2e1ec] rounded-lg mx-auto flex items-center justify-center">
+                    <span className="text-[#747685] text-xs">جارٍ الإنشاء...</span>
+                  </div>
+                )}
+                <p className="text-xs text-[#747685] mt-2">
+                  {lastInvoice.qrCode ? 'تم الإنشاء بنجاح' : 'ZATCA QR'}
+                </p>
               </div>
             </div>
 

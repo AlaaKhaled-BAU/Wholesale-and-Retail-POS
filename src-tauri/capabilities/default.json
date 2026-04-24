@@ -1,10 +1,9 @@
 {
   "identifier": "default",
-  "description": "Default capability",
+  "description": "Default capability for main window",
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "sql:default",
-    "shell:default"
+    "sql:default"
   ]
 }

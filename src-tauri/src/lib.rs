@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+pub mod auth;
+pub mod error;
+pub mod logging;
+pub use error::PosError;
+
 // ============================================================
 // Core entities — must match TypeScript interfaces exactly
 // ============================================================
@@ -125,6 +130,8 @@ pub struct CashierSession {
     pub id: String,
     pub user_id: String,
     pub branch_id: String,
+    pub user_name_ar: String,
+    pub role: String,
     pub opened_at: String,
     pub closed_at: Option<String>,
     pub opening_float: f64,
@@ -324,4 +331,5 @@ pub struct AppState {
     pub db: std::sync::Mutex<rusqlite::Connection>,
     pub current_session: std::sync::Mutex<Option<CashierSession>>,
     pub settings: std::sync::Mutex<Option<AppSettings>>,
+    pub rate_limiter: auth::RateLimiter,
 }

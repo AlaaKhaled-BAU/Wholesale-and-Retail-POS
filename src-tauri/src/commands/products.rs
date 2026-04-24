@@ -1,4 +1,4 @@
-use pos::{Category, NewProduct, Product};
+use pos::{Category, NewProduct, PosError, Product};
 use pos::AppState;
 use rusqlite::OptionalExtension;
 use rusqlite::params;
@@ -30,8 +30,8 @@ pub fn get_products(
     category_id: Option<String>,
     branch_id: String,
     state: State<AppState>,
-) -> Result<Vec<Product>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<Vec<Product>, PosError> {
+    let conn = state.db.lock().map_err(|_| PosError::InternalError)?;
 
     let mut sql = String::from(
         "SELECT p.id, p.sku, p.barcode, p.name_ar, p.name_en, \
@@ -50,7 +50,7 @@ pub fn get_products(
     }
     sql.push_str(" ORDER BY p.name_ar LIMIT 50");
 
-    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(&sql).map_err(|_| PosError::InternalError)?;
 
     let products: Result<Vec<Product>, rusqlite::Error> = if let Some(ref cat_id) = category_id {
         stmt.query_map(params![&branch_id, &query, &query, &query, cat_id], map_product_row)
@@ -60,7 +60,7 @@ pub fn get_products(
             .and_then(|rows| rows.collect())
     };
 
-    products.map_err(|e| e.to_string())
+    products.map_err(|_| PosError::InternalError)
 }
 
 #[tauri::command]
@@ -68,8 +68,8 @@ pub fn get_product_by_barcode(
     barcode: String,
     branch_id: String,
     state: State<AppState>,
-) -> Result<Option<Product>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<Option<Product>, PosError> {
+    let conn = state.db.lock().map_err(|_| PosError::InternalError)?;
 
     let product = conn
         .query_row(
@@ -86,7 +86,7 @@ pub fn get_product_by_barcode(
             map_product_row,
         )
         .optional()
-        .map_err(|e| e.to_string())?;
+        .map_err(|_| PosError::InternalError)?;
 
     Ok(product)
 }
@@ -95,9 +95,26 @@ pub fn get_product_by_barcode(
 pub fn create_product(
     product: NewProduct,
     branch_id: String,
+    cashier_id: String,
+    session_id: String,
     state: State<AppState>,
-) -> Result<Product, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<Product, PosError> {
+    let conn = state.db.lock().map_err(|_| PosError::InternalError)?;
+
+    // Validate active session
+    if let Err(e) = pos::auth::validate_session(&conn, &session_id, &cashier_id) {
+        return Err(e);
+    }
+
+    // Require admin or manager role
+    if let Err(e) = pos::auth::require_role_db(&conn, &cashier_id, &[pos::auth::Role::Admin, pos::auth::Role::Manager]) {
+        return Err(e);
+    }
+
+    // Validate prices
+    if product.sell_price < 0.0 {
+        return Err(PosError::ValidationError("سعر البيع لا يمكن أن يكون سالباً".to_string()));
+    }
 
     let id = format!("PRD-{}", Uuid::new_v4());
     let sku = product.sku.unwrap_or_else(|| format!("SKU-{}", Uuid::new_v4()));
@@ -120,16 +137,14 @@ pub fn create_product(
             &product.sell_price,
             &vat_rate,
         ],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     // Auto-create inventory row
     let inv_id = format!("INV-{}", Uuid::new_v4());
     conn.execute(
         "INSERT INTO inventory (id, branch_id, product_id, qty_on_hand) VALUES (?1, ?2, ?3, 0)",
         params![&inv_id, &branch_id, &id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     // Audit log
     conn.execute(
@@ -140,8 +155,7 @@ pub fn create_product(
             &id,
             format!("{{\"sku\":\"{}\"}}", sku),
         ],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     // Return the created product
     let created = conn
@@ -156,7 +170,7 @@ pub fn create_product(
             params![&branch_id, &id],
             map_product_row,
         )
-        .map_err(|_| "فشل إنشاء المنتج".to_string())?;
+        .map_err(|_| PosError::InternalError)?;
 
     Ok(created)
 }
@@ -166,9 +180,26 @@ pub fn update_product(
     id: String,
     product: NewProduct,
     branch_id: String,
+    cashier_id: String,
+    session_id: String,
     state: State<AppState>,
-) -> Result<Product, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<Product, PosError> {
+    let conn = state.db.lock().map_err(|_| PosError::InternalError)?;
+
+    // Validate active session
+    if let Err(e) = pos::auth::validate_session(&conn, &session_id, &cashier_id) {
+        return Err(e);
+    }
+
+    // Require admin or manager role
+    if let Err(e) = pos::auth::require_role_db(&conn, &cashier_id, &[pos::auth::Role::Admin, pos::auth::Role::Manager]) {
+        return Err(e);
+    }
+
+    // Validate prices
+    if product.sell_price < 0.0 {
+        return Err(PosError::ValidationError("سعر البيع لا يمكن أن يكون سالباً".to_string()));
+    }
 
     conn.execute(
         "UPDATE products SET name_ar = ?1, name_en = ?2, barcode = ?3, category_id = ?4, \
@@ -184,16 +215,14 @@ pub fn update_product(
             &product.vat_rate.unwrap_or(0.15),
             &id,
         ],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     // Audit log
     conn.execute(
         "INSERT INTO audit_log (id, action, entity_type, entity_id) \
          VALUES (?1, 'product_updated', 'product', ?2)",
         params![format!("AUD-{}", Uuid::new_v4()), &id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     // Return updated product
     let updated = conn
@@ -208,39 +237,52 @@ pub fn update_product(
             params![&branch_id, &id],
             map_product_row,
         )
-        .map_err(|_| "المنتج غير موجود".to_string())?;
+        .map_err(|_| PosError::NotFound("المنتج غير موجود".to_string()))?;
 
     Ok(updated)
 }
 
 #[tauri::command]
-pub fn toggle_product_active(id: String, state: State<AppState>) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+pub fn toggle_product_active(
+    id: String,
+    cashier_id: String,
+    session_id: String,
+    state: State<AppState>,
+) -> Result<(), PosError> {
+    let conn = state.db.lock().map_err(|_| PosError::InternalError)?;
+
+    // Validate active session
+    if let Err(e) = pos::auth::validate_session(&conn, &session_id, &cashier_id) {
+        return Err(e);
+    }
+
+    // Require admin or manager role
+    if let Err(e) = pos::auth::require_role_db(&conn, &cashier_id, &[pos::auth::Role::Admin, pos::auth::Role::Manager]) {
+        return Err(e);
+    }
 
     conn.execute(
         "UPDATE products SET is_active = NOT is_active WHERE id = ?1",
         params![&id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     // Audit log
     conn.execute(
         "INSERT INTO audit_log (id, action, entity_type, entity_id) \
          VALUES (?1, 'product_updated', 'product', ?2)",
         params![format!("AUD-{}", Uuid::new_v4()), &id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     Ok(())
 }
 
 #[tauri::command]
-pub fn get_categories(state: State<AppState>) -> Result<Vec<Category>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+pub fn get_categories(state: State<AppState>) -> Result<Vec<Category>, PosError> {
+    let conn = state.db.lock().map_err(|_| PosError::InternalError)?;
 
     let mut stmt = conn
         .prepare("SELECT id, name_ar, name_en FROM categories ORDER BY name_ar")
-        .map_err(|e| e.to_string())?;
+        .map_err(|_| PosError::InternalError)?;
 
     let categories = stmt
         .query_map([], |row| {
@@ -251,7 +293,7 @@ pub fn get_categories(state: State<AppState>) -> Result<Vec<Category>, String> {
             })
         })
         .and_then(|rows| rows.collect())
-        .map_err(|e| e.to_string())?;
+        .map_err(|_| PosError::InternalError)?;
 
     Ok(categories)
 }
@@ -260,17 +302,28 @@ pub fn get_categories(state: State<AppState>) -> Result<Vec<Category>, String> {
 pub fn create_category(
     name_ar: String,
     name_en: Option<String>,
+    cashier_id: String,
+    session_id: String,
     state: State<AppState>,
-) -> Result<Category, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+) -> Result<Category, PosError> {
+    let conn = state.db.lock().map_err(|_| PosError::InternalError)?;
+
+    // Validate active session
+    if let Err(e) = pos::auth::validate_session(&conn, &session_id, &cashier_id) {
+        return Err(e);
+    }
+
+    // Require admin or manager role
+    if let Err(e) = pos::auth::require_role_db(&conn, &cashier_id, &[pos::auth::Role::Admin, pos::auth::Role::Manager]) {
+        return Err(e);
+    }
 
     let id = format!("CAT-{}", Uuid::new_v4());
 
     conn.execute(
         "INSERT INTO categories (id, name_ar, name_en) VALUES (?1, ?2, ?3)",
         params![&id, &name_ar, &name_en.clone().unwrap_or_default()],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     Ok(Category {
         id,

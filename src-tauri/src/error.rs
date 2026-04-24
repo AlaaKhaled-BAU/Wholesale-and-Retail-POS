@@ -51,7 +51,7 @@ impl std::error::Error for PosError {}
 impl From<rusqlite::Error> for PosError {
     fn from(err: rusqlite::Error) -> Self {
         // Log the real error internally, return safe message externally
-        eprintln!("[DB ERROR] {:?}", err);
+        log::error!(target: "pos::db", "Database error: {:?}", err);
         PosError::DatabaseError
     }
 }
@@ -136,14 +136,7 @@ impl From<std::string::FromUtf8Error> for PosError {
 
 impl From<std::io::Error> for PosError {
     fn from(err: std::io::Error) -> Self {
-        eprintln!("[IO ERROR] {:?}", err);
-        PosError::InternalError
-    }
-}
-
-impl From<keyring::Error> for PosError {
-    fn from(err: keyring::Error) -> Self {
-        eprintln!("[KEYRING ERROR] {:?}", err);
+        log::error!(target: "pos::io", "IO error: {:?}", err);
         PosError::InternalError
     }
 }
