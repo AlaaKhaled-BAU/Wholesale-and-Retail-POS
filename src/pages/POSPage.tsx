@@ -7,6 +7,8 @@ import { useInvoiceStore } from '../store/useInvoiceStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useToast } from '../hooks/useToast';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { extractErrorMessage, printReceipt } from '../lib/tauri-commands';
+import type { Product } from '../types/product';
 import { cn } from '../lib/utils';
 
 export default function POSPage() {
@@ -31,6 +33,7 @@ export default function POSPage() {
   const [refundInvoice, setRefundInvoice] = useState<{
     id: string;
     invoiceNumber: string;
+    total?: number;
     lines: { productId: string; name: string; qty: number; unitPrice: number; selectedQty: number }[];
   } | null>(null);
   const [isSearchingInvoice, setIsSearchingInvoice] = useState(false);
@@ -128,7 +131,7 @@ export default function POSPage() {
     }
   };
 
-  const handleProductClick = (product: typeof products[0]) => {
+  const handleProductClick = (product: Product) => {
     addItem(product);
     toast.success(`تم إضافة: ${product.nameAr}`);
     setSearchQuery('');
@@ -166,8 +169,8 @@ export default function POSPage() {
       } else {
         toast.error('فشل في إنشاء الفاتورة');
       }
-    } catch (error) {
-      toast.error('حدث خطأ أثناء معالجة الدفع');
+    } catch (err) {
+      toast.error(extractErrorMessage(err, 'حدث خطأ أثناء معالجة الدفع'));
     } finally {
       setIsProcessingPayment(false);
     }
@@ -178,14 +181,12 @@ export default function POSPage() {
     setIsPrintingReceipt(true);
     setPrintError(false);
     try {
-      // TODO: Replace with real Tauri invoke when Dev B implements print_receipt
-      // await printReceipt(lastInvoice.id);
-      await new Promise((resolve) => setTimeout(resolve, 800)); // Mock
+      await printReceipt(lastInvoice.id);
       toast.success('تم إرسال الإيصال للطباعة');
       setPrintError(false);
-    } catch (error) {
+    } catch (err) {
       setPrintError(true);
-      toast.error('فشل في الطباعة — اضغط إعادة المحاولة');
+      toast.error(extractErrorMessage(err, 'فشل في الطباعة'));
     } finally {
       setIsPrintingReceipt(false);
     }
@@ -204,13 +205,17 @@ export default function POSPage() {
     setIsSearchingInvoice(true);
     try {
       const invoice = await import('../lib/tauri-commands').then(m => m.getInvoice(refundInvoiceNumber.trim()));
-      if (!invoice || !invoice.lines) {
-        toast.error('الفاتورة غير موجودة');
+      if (!invoice || !invoice.lines || invoice.lines.length === 0) {
+        toast.error('الفاتورة غير موجودة أو لا تحتوي على أصناف');
+        setRefundInvoice(null);
+      } else if (invoice.invoiceType === 'credit_note') {
+        toast.warning('لا يمكن إرجاع فاتورة إرجاع');
         setRefundInvoice(null);
       } else {
         setRefundInvoice({
           id: invoice.id,
           invoiceNumber: invoice.invoiceNumber,
+          total: invoice.total,
           lines: invoice.lines.map(l => ({
             productId: l.productId,
             name: l.productNameAr,
@@ -220,8 +225,8 @@ export default function POSPage() {
           })),
         });
       }
-    } catch (err: any) {
-      toast.error(err?.message || 'فشل في البحث عن الفاتورة');
+    } catch (err) {
+      toast.error(extractErrorMessage(err, 'فشل في البحث عن الفاتورة'));
       setRefundInvoice(null);
     } finally {
       setIsSearchingInvoice(false);
@@ -250,15 +255,15 @@ export default function POSPage() {
       const { createRefundInvoice } = await import('../lib/tauri-commands');
       await createRefundInvoice(
         refundInvoice.id,
-        selectedLines.map(l => ({ productId: l.productId, qty: l.selectedQty }))
+        selectedLines.map(l => ({ productId: l.productId, qty: l.selectedQty, unitPrice: l.unitPrice }))
       );
       toast.success('تم معالجة الإرجاع بنجاح');
       setRefundInvoice(null);
       setRefundInvoiceNumber('');
       setIsRefundMode(false);
       setShowRefundConfirm(false);
-    } catch (err: any) {
-      toast.error(err?.message || 'فشل في معالجة الإرجاع');
+    } catch (err) {
+      toast.error(extractErrorMessage(err, 'فشل في معالجة الإرجاع'));
     }
   };
 
@@ -334,7 +339,7 @@ export default function POSPage() {
             </div>
             {searchQuery && (
               <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4 max-h-64 overflow-y-auto">
-                {products.filter((p) => p.nameAr.includes(searchQuery) || p.barcode.includes(searchQuery)).map((product) => (
+                {products.filter((p) => p.nameAr.includes(searchQuery) || (p.barcode || '').includes(searchQuery)).map((product) => (
                   <button key={product.id} onClick={() => handleProductClick(product)} className="w-full flex items-center justify-between p-4 hover:bg-gray-50 border-b border-gray-100 last:border-0 text-right">
                     <div>
                       <div className="font-medium text-gray-900">{product.nameAr}</div>
@@ -342,11 +347,11 @@ export default function POSPage() {
                     </div>
                     <div className="text-left">
                       <div className="font-semibold text-primary-700">{product.sellPrice.toFixed(2)} ر.س</div>
-                      <div className="text-xs text-gray-500">المخزون: {product.stockQty}</div>
+                      <div className="text-xs text-gray-500">المخزون: {product.stockQty ?? 0}</div>
                     </div>
                   </button>
                 ))}
-                {products.filter((p) => p.nameAr.includes(searchQuery) || p.barcode.includes(searchQuery)).length === 0 && (
+                {products.filter((p) => p.nameAr.includes(searchQuery) || (p.barcode || '').includes(searchQuery)).length === 0 && (
                   <div className="p-4 text-center text-gray-500">لا توجد نتائج</div>
                 )}
               </div>
@@ -383,7 +388,7 @@ export default function POSPage() {
                           className={cn(
                             'flex flex-col items-center text-center p-4 rounded-xl border transition-all duration-200',
                             'hover:border-primary-300 hover:shadow-md hover:-translate-y-0.5 active:scale-95',
-                            product.stockQty <= product.minStock
+                            (product.stockQty ?? 0) <= (product.minStock ?? 0)
                               ? 'border-rose-200 bg-rose-50/50'
                               : 'border-gray-200 bg-white'
                           )}
@@ -399,7 +404,7 @@ export default function POSPage() {
                           </div>
                           <div className={cn(
                             'text-[10px] mt-1 px-1.5 py-0.5 rounded-full',
-                            product.stockQty <= product.minStock
+                            (product.stockQty ?? 0) <= (product.minStock ?? 0)
                               ? 'bg-rose-100 text-rose-600'
                               : 'bg-gray-100 text-gray-500'
                           )}>
@@ -655,15 +660,15 @@ export default function POSPage() {
                 <span className="text-gray-500">المجموع الفرعي:</span>
                 <span className="font-medium">{lastInvoice.subtotal.toFixed(2)} ر.س</span>
               </div>
-              {lastInvoice.discount > 0 && (
+              {lastInvoice.discountAmount > 0 && (
                 <div className="flex justify-between text-sm text-success-600">
                   <span>الخصم:</span>
-                  <span>-{lastInvoice.discount.toFixed(2)} ر.س</span>
+                  <span>-{lastInvoice.discountAmount.toFixed(2)} ر.س</span>
                 </div>
               )}
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">الضريبة:</span>
-                <span className="font-medium">{lastInvoice.vatTotal.toFixed(2)} ر.س</span>
+                <span className="font-medium">{lastInvoice.vatAmount.toFixed(2)} ر.س</span>
               </div>
               <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
                 <span>الإجمالي:</span>

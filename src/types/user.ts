@@ -1,14 +1,15 @@
 // ============================================================
 // User & Auth types — aligned with Rust backend
+// NOTE: backend returns snake_case, frontend uses camelCase
 // ============================================================
 
 export interface User {
   id: string;
-  branchId: string;
-  nameAr: string;
+  branch_id: string;
+  name_ar: string;
   role: 'admin' | 'manager' | 'cashier';
-  isActive: boolean;
-  createdAt: string;
+  is_active: boolean;
+  created_at: string;
 }
 
 export interface SessionToken {
@@ -19,19 +20,24 @@ export interface SessionToken {
   sessionId: string;
 }
 
-// Frontend compatibility alias
+// Frontend compatibility alias — used in auth store
 export interface Session {
   token: string;
-  user: User;
+  user: {
+    id: string;
+    name: string;
+    role: string;
+    branchId: string;
+  };
 }
 
 export interface CashierSession {
   id: string;
-  userId: string;
-  branchId: string;
-  openedAt: string;
-  closedAt?: string;
-  openingFloat: number;
-  closingCash?: number;
+  user_id: string;
+  branch_id: string;
+  opened_at: string;
+  closed_at?: string;
+  opening_float: number;
+  closing_cash?: number;
   status: 'open' | 'closed';
 }

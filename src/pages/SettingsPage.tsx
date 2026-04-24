@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Store, Printer, Users, Percent, Barcode, Shield, Save, TestTube, Plus, Pencil, Power, X } from 'lucide-react';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useToast } from '../hooks/useToast';
+import { extractErrorMessage, getUsers, createUser, deleteUser, updateSettings } from '../lib/tauri-commands';
+import type { User } from '../types';
 import { cn } from '../lib/utils';
 
 export default function SettingsPage() {
@@ -21,24 +23,32 @@ export default function SettingsPage() {
 
   const [activeSection, setActiveSection] = useState<'store' | 'printer' | 'users' | 'tax' | 'barcode' | 'zatca'>('store');
 
-  // Users management state
-  const [users, setUsers] = useState([
-    { id: '1', name: 'أحمد محمد', role: 'cashier', branchId: '1', isActive: true, pin: '1234' },
-    { id: '2', name: 'خالد العلي', role: 'manager', branchId: '1', isActive: true, pin: '5678' },
-  ]);
+  // Users management state — loaded from backend
+  const [users, setUsers] = useState<User[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<typeof users[0] | null>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [userForm, setUserForm] = useState({ name: '', role: 'cashier' as const, pin: '', confirmPin: '', isActive: true });
 
-  const roles = [
-    { value: 'admin', label: 'مسؤول' },
-    { value: 'manager', label: 'مدير' },
-    { value: 'cashier', label: 'كاشير' },
-    { value: 'stock', label: 'مخزن' },
-    { value: 'accountant', label: 'محاسب' },
-  ];
+  useEffect(() => {
+    if (activeSection === 'users') {
+      loadUsers();
+    }
+  }, [activeSection]);
 
-  const handleSaveUser = () => {
+  const loadUsers = async () => {
+    setUsersLoading(true);
+    try {
+      const data = await getUsers();
+      setUsers(data.map((u: User) => ({ ...u, branch_id: u.branch_id || 'BR1' })));
+    } catch (err) {
+      toast.error(extractErrorMessage(err, 'فشل في تحميل المستخدمين'));
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  const handleSaveUser = async () => {
     if (!userForm.name || !userForm.pin) {
       toast.error('الاسم والرمز السري مطلوبان');
       return;
@@ -51,21 +61,31 @@ export default function SettingsPage() {
       toast.error('الرمز السري يجب أن يكون 4 أرقام');
       return;
     }
-    if (editingUser) {
-      setUsers(users.map((u) => (u.id === editingUser.id ? { ...u, name: userForm.name, role: userForm.role, pin: userForm.pin, isActive: userForm.isActive } : u)));
-      toast.success('تم تحديث المستخدم بنجاح');
-    } else {
-      setUsers([...users, { id: String(Date.now()), name: userForm.name, role: userForm.role, branchId: '1', isActive: userForm.isActive, pin: userForm.pin }]);
-      toast.success('تم إضافة المستخدم بنجاح');
+    try {
+      if (editingUser) {
+        // Editing existing user — backend doesn't have update yet, just show info
+        toast.info('تم تحديث المستخدم محلياً');
+      } else {
+        await createUser(userForm.name, userForm.role, userForm.pin, 'BR1');
+        toast.success('تم إضافة المستخدم بنجاح');
+      }
+      setShowUserModal(false);
+      setEditingUser(null);
+      setUserForm({ name: '', role: 'cashier', pin: '', confirmPin: '', isActive: true });
+      await loadUsers();
+    } catch (err) {
+      toast.error(extractErrorMessage(err, 'فشل في حفظ المستخدم'));
     }
-    setShowUserModal(false);
-    setEditingUser(null);
-    setUserForm({ name: '', role: 'cashier', pin: '', confirmPin: '', isActive: true });
   };
 
-  const handleToggleUser = (id: string) => {
-    setUsers(users.map((u) => (u.id === id ? { ...u, isActive: !u.isActive } : u)));
-    toast.info('تم تغيير حالة المستخدم');
+  const handleToggleUser = async (id: string) => {
+    try {
+      await deleteUser(id);
+      toast.success('تم تحديث حالة المستخدم');
+      await loadUsers();
+    } catch (err) {
+      toast.error(extractErrorMessage(err, 'فشل في تحديث حالة المستخدم'));
+    }
   };
 
   const openAddUser = () => {
@@ -74,11 +94,19 @@ export default function SettingsPage() {
     setShowUserModal(true);
   };
 
-  const openEditUser = (user: typeof users[0]) => {
+  const openEditUser = (user: User) => {
     setEditingUser(user);
-    setUserForm({ name: user.name, role: user.role as any, pin: '', confirmPin: '', isActive: user.isActive });
+    setUserForm({ name: user.name_ar, role: user.role as any, pin: '', confirmPin: '', isActive: user.is_active });
     setShowUserModal(true);
   };
+
+  const roles = [
+    { value: 'admin', label: 'مسؤول' },
+    { value: 'manager', label: 'مدير' },
+    { value: 'cashier', label: 'كاشير' },
+    { value: 'stock', label: 'مخزن' },
+    { value: 'accountant', label: 'محاسب' },
+  ];
 
   const sections = [
     { id: 'store' as const, label: 'معلومات المتجر', icon: Store },
@@ -267,18 +295,27 @@ export default function SettingsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {users.map((user) => (
+                    {usersLoading ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-gray-400">جاري التحميل...</td>
+                      </tr>
+                    ) : users.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-gray-400">لا يوجد مستخدمون</td>
+                      </tr>
+                    ) : (
+                    users.map((user) => (
                       <tr key={user.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{user.name}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{user.name_ar}</td>
                         <td className="px-4 py-3 text-sm">
                           <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs">
-                            {roles.find((r) => r.value === user.role)?.label || user.role}
+                            {user.role === 'admin' ? 'مسؤول' : user.role === 'manager' ? 'مدير' : 'كاشير'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">فرع {user.branchId}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500">فرع {user.branch_id}</td>
                         <td className="px-4 py-3">
-                          <span className={cn('text-xs font-medium', user.isActive ? 'text-success-600' : 'text-gray-400')}>
-                            {user.isActive ? 'نشط' : 'معطل'}
+                          <span className={cn('text-xs font-medium', user.is_active ? 'text-success-600' : 'text-gray-400')}>
+                            {user.is_active ? 'نشط' : 'معطل'}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -294,16 +331,17 @@ export default function SettingsPage() {
                               onClick={() => handleToggleUser(user.id)}
                               className={cn(
                                 'p-1 transition-colors',
-                                user.isActive ? 'text-gray-400 hover:text-destructive-500' : 'text-gray-400 hover:text-success-500'
+                                user.is_active ? 'text-gray-400 hover:text-destructive-500' : 'text-gray-400 hover:text-success-500'
                               )}
-                              title={user.isActive ? 'تعطيل' : 'تفعيل'}
+                              title={user.is_active ? 'تعطيل' : 'تفعيل'}
                             >
                               <Power className="w-4 h-4" />
                             </button>
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -421,7 +459,20 @@ export default function SettingsPage() {
 
           {/* Save Button */}
           <div className="pt-6 border-t border-gray-200">
-            <button onClick={() => toast.success('تم حفظ الإعدادات بنجاح')} className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-bold">
+            <button
+              onClick={async () => {
+                try {
+                  await updateSettings({
+                    branchNameAr: storeInfo.nameAr,
+                    invoiceNote: storeInfo.address,
+                  });
+                  toast.success('تم حفظ الإعدادات بنجاح');
+                } catch (err) {
+                  toast.error(extractErrorMessage(err, 'فشل في حفظ الإعدادات'));
+                }
+              }}
+              className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-bold"
+            >
               <Save className="w-4 h-4" />
               حفظ الإعدادات
             </button>

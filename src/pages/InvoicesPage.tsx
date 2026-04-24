@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Search, Printer, Eye, FileText, CheckCircle2, Clock, XCircle, CalendarDays, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Printer, Eye, FileText, CheckCircle2, XCircle, CalendarDays, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useInvoiceStore } from '../store/useInvoiceStore';
 import { useToast } from '../hooks/useToast';
 import { cn } from '../lib/utils';
 
-const statusConfig = {
+const statusConfig: Record<string, { label: string; color: string; icon: typeof FileText }> = {
   draft: { label: 'مسودة', color: 'bg-gray-100 text-gray-700', icon: FileText },
-  cleared: { label: 'مُبلَّغ', color: 'bg-success-100 text-success-700', icon: CheckCircle2 },
-  pending: { label: 'معلق', color: 'bg-warning-100 text-warning-700', icon: Clock },
-  rejected: { label: 'مرفوض', color: 'bg-destructive-100 text-destructive-700', icon: XCircle },
+  confirmed: { label: 'مؤكدة', color: 'bg-success-100 text-success-700', icon: CheckCircle2 },
+  cancelled: { label: 'ملغاة', color: 'bg-destructive-100 text-destructive-700', icon: XCircle },
 };
 
 export default function InvoicesPage() {
@@ -32,7 +31,7 @@ export default function InvoicesPage() {
   const filteredInvoices = invoices.filter((inv) => {
     const matchesSearch =
       inv.invoiceNumber.includes(searchQuery) ||
-      inv.customerName?.includes(searchQuery);
+      inv.customerNameAr?.includes(searchQuery);
 
     let matchesDate = true;
     const invDate = new Date(inv.createdAt).toISOString().split('T')[0];
@@ -128,9 +127,9 @@ export default function InvoicesPage() {
       <div className="flex gap-1 bg-white rounded-xl shadow-sm p-2 overflow-x-auto">
         {[
           { key: 'all', label: 'الكل', count: invoices.length },
-          { key: 'cleared', label: 'مُبلَّغ', count: invoices.filter((i) => i.status === 'cleared').length },
-          { key: 'pending', label: 'معلق', count: invoices.filter((i) => i.status === 'pending').length },
-          { key: 'rejected', label: 'مرفوض', count: invoices.filter((i) => i.status === 'rejected').length },
+          { key: 'confirmed', label: 'مُؤكدة', count: invoices.filter((i) => i.status === 'confirmed').length },
+          { key: 'draft', label: 'مسودة', count: invoices.filter((i) => i.status === 'draft').length },
+          { key: 'cancelled', label: 'ملغاة', count: invoices.filter((i) => i.status === 'cancelled').length },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -176,13 +175,13 @@ export default function InvoicesPage() {
                   <tr key={invoice.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{invoice.invoiceNumber}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">{formatDate(invoice.createdAt)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{invoice.customerName || 'عميل نقدي'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{invoice.customerNameAr || 'عميل نقدي'}</td>
                     <td className="px-4 py-3 text-sm">
                       <span className={cn(
                         'px-2 py-0.5 rounded-full text-xs',
-                        invoice.type === 'standard' ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-700'
+                        invoice.invoiceType === 'standard' ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-700'
                       )}>
-                        {invoice.type === 'standard' ? 'ضريبية' : 'مبسطة'}
+                        {invoice.invoiceType === 'standard' ? 'ضريبية' : 'مبسطة'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm font-bold text-gray-900">{invoice.total.toFixed(2)} ر.س</td>
@@ -292,15 +291,15 @@ export default function InvoicesPage() {
                   <span className="text-gray-500">المجموع الفرعي:</span>
                   <span>{selectedInvoice.subtotal.toFixed(2)} ر.س</span>
                 </div>
-                {selectedInvoice.discount > 0 && (
+                {selectedInvoice.discountAmount > 0 && (
                   <div className="flex justify-between text-sm text-success-600">
                     <span>الخصم:</span>
-                    <span>-{selectedInvoice.discount.toFixed(2)} ر.س</span>
+                    <span>-{selectedInvoice.discountAmount.toFixed(2)} ر.س</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">ضريبة القيمة المضافة:</span>
-                  <span>{selectedInvoice.vatTotal.toFixed(2)} ر.س</span>
+                  <span>{selectedInvoice.vatAmount.toFixed(2)} ر.س</span>
                 </div>
                 <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
                   <span>الإجمالي:</span>

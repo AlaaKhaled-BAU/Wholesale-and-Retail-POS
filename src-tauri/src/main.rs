@@ -135,6 +135,8 @@ fn main() {
             commands::users::close_cashier_session,
             commands::users::get_current_session,
             commands::users::create_user,
+            commands::users::get_users,
+            commands::users::delete_user,
             commands::products::get_products,
             commands::products::get_product_by_barcode,
             commands::products::create_product,

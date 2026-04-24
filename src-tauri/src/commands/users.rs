@@ -274,6 +274,32 @@ pub fn logout_user(state: State<AppState>) -> Result<bool, PosError> {
 // ============================================================
 
 #[tauri::command]
+pub fn get_users(state: State<AppState>) -> Result<Vec<pos::User>, PosError> {
+    let _token = require_role(&state, &[Role::Admin, Role::Manager])?;
+    let conn = state.db.lock()?;
+    let mut stmt = conn.prepare("SELECT id, branch_id, name_ar, role, is_active, created_at FROM users WHERE is_active = 1")?;
+    let users = stmt.query_map([], |row| {
+        Ok(pos::User {
+            id: row.get(0)?,
+            branch_id: row.get(1)?,
+            name_ar: row.get(2)?,
+            role: row.get(3)?,
+            is_active: row.get::<_, i32>(4)? == 1,
+            created_at: row.get(5)?,
+        })
+    })?.collect::<Result<Vec<_>, _>>()?;
+    Ok(users)
+}
+
+#[tauri::command]
+pub fn delete_user(id: String, state: State<AppState>) -> Result<(), PosError> {
+    let _token = require_role(&state, &[Role::Admin])?;
+    let conn = state.db.lock()?;
+    conn.execute("UPDATE users SET is_active = 0 WHERE id = ?1", params![&id])?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn create_user(
     name_ar: String,
     role: String,

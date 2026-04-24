@@ -32,7 +32,7 @@ export default function InventoryPage() {
   const filteredProducts = products.filter((product) => {
     const matchesSearch = !searchQuery || 
       product.nameAr.includes(searchQuery) || 
-      product.barcode.includes(searchQuery);
+      (product.barcode || '').includes(searchQuery);
     const matchesCategory = !selectedCategory || product.categoryId === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -48,16 +48,16 @@ export default function InventoryPage() {
     if (product) {
       setEditingProduct(product);
       setFormData({
-        barcode: product.barcode,
+        barcode: product.barcode || '',
         nameAr: product.nameAr,
-        nameEn: product.nameEn || '',
-        categoryId: product.categoryId,
+        nameEn: product.nameEn ?? '',
+        categoryId: product.categoryId ?? '',
         unit: product.unit,
         sellPrice: product.sellPrice,
         costPrice: product.costPrice,
         vatRate: product.vatRate,
-        stockQty: product.stockQty,
-        minStock: product.minStock,
+        stockQty: product.stockQty ?? 0,
+        minStock: product.minStock ?? 0,
         isActive: product.isActive,
       });
     } else {
@@ -113,14 +113,14 @@ export default function InventoryPage() {
       </div>
 
       {/* Low Stock Summary */}
-      {products.some((p) => p.stockQty <= p.minStock) && (
+      {products.some((p) => (p.stockQty ?? 0) <= (p.minStock ?? 0)) && (
         <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center">
             <Package className="w-4 h-4 text-rose-600" />
           </div>
           <div>
             <div className="text-sm font-bold text-rose-700">
-              {products.filter((p) => p.stockQty <= p.minStock).length} منتجات بمخزون منخفض
+              {products.filter((p) => (p.stockQty ?? 0) <= (p.minStock ?? 0)).length} منتجات بمخزون منخفض
             </div>
             <div className="text-xs text-rose-500">يرجى مراجعة المنتجات وإعادة الطلب</div>
           </div>
@@ -152,7 +152,7 @@ export default function InventoryPage() {
         >
           <option value="">جميع الفئات</option>
           {categories.map((cat) => (
-            <option key={cat.id} value={cat.id}>{cat.name}</option>
+            <option key={cat.id} value={cat.id}>{cat.nameAr}</option>
           ))}
         </select>
         <button
@@ -191,11 +191,11 @@ export default function InventoryPage() {
                   <td className="px-4 py-3 text-sm">
                     <div className="flex items-center gap-2">
                       <span className={cn(
-                        product.stockQty <= product.minStock ? 'text-destructive-600 font-bold' : 'text-gray-900'
+                        (product.stockQty ?? 0) <= (product.minStock ?? 0) ? 'text-destructive-600 font-bold' : 'text-gray-900'
                       )}>
                         {product.stockQty}
                       </span>
-                      {product.stockQty <= product.minStock && (
+                      {(product.stockQty ?? 0) <= (product.minStock ?? 0) && (
                         <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-600 text-[10px] font-bold">
                           مخزون منخفض
                         </span>
@@ -306,7 +306,7 @@ export default function InventoryPage() {
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    <option key={cat.id} value={cat.id}>{cat.nameAr}</option>
                   ))}
                 </select>
               </div>

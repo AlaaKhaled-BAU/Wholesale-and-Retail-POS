@@ -21,7 +21,26 @@ import type {
   CashierSession,
   Category,
   InventoryItem,
+  User,
 } from '../types';
+
+// ============================================================
+// Error extraction helper for Tauri commands
+// Handles PosError {type, message} objects and plain Error/strings
+// ============================================================
+export function extractErrorMessage(error: unknown, fallback: string): string {
+  if (!error) return fallback;
+  if (typeof error === 'string') return error || fallback;
+  if (typeof error === 'object') {
+    if ('message' in error && typeof (error as Record<string, unknown>).message === 'string') {
+      return (error as { message: string }).message;
+    }
+    if ('type' in error) {
+      return JSON.stringify(error);
+    }
+  }
+  return String(error) || fallback;
+}
 
 // ============================================================
 // Auth
@@ -51,6 +70,15 @@ export const closeCashierSession = (sessionId: string, closingCash: number, user
 
 export const getCurrentSession = (userId: string) =>
   invoke<CashierSession | null>('get_current_session', { userId });
+
+export const getUsers = () =>
+  invoke<User[]>('get_users');
+
+export const deleteUser = (id: string) =>
+  invoke<void>('delete_user', { id });
+
+export const createUser = (nameAr: string, role: string, pin: string, branchId: string) =>
+  invoke<User>('create_user', { nameAr, role, pin, branchId });
 
 // ============================================================
 // Products
@@ -111,7 +139,8 @@ export const getInventoryReport = () =>
   invoke<InventoryReportRow[]>('get_inventory_report', { branchId: DEFAULT_BRANCH_ID });
 
 export const adjustInventory = (productId: string, newQty: number, reason: string, userId: string) =>
-  invoke<void>('adjust_inventory', { branchId: DEFAULT_BRANCH_ID, productId, newQty, reason, userId });
+  invoke<void>('adjust_inventory', { branchId: DEFAULT_BRANCH_ID, productId, newQty, reason, userId })
+    .catch((err: unknown) => { throw new Error(extractErrorMessage(err, 'فشل في تعديل المخزون')); });
 
 // ============================================================
 // Customers
@@ -233,12 +262,15 @@ export const createInvoice = async (cartData: CartData): Promise<Invoice> => {
   return invoke<Invoice>('create_invoice', { payload });
 };
 
-export const createRefundInvoice = async (originalInvoiceId: string, lines: { productId: string; qty: number }[]) => {
+export const createRefundInvoice = async (
+  originalInvoiceId: string,
+  lines: { productId: string; qty: number; unitPrice: number }[],
+) => {
   const refundLines: RefundLine[] = lines.map(l => ({
     productId: l.productId,
     productNameAr: '',
     qty: l.qty,
-    unitPrice: 0,
+    unitPrice: l.unitPrice,
     vatRate: 0.15,
   }));
   return invoke<Invoice>('create_refund_invoice', { originalInvoiceId, lines: refundLines });

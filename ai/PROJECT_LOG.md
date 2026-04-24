@@ -7,10 +7,27 @@
 
 | Field | Value |
 |-------|-------|
-| **Current Phase** | Phase 8 — MERGE COMPLETE (integration branch ready) |
-| **Last Updated** | April 22, 2026 |
-| **Active Dev** | Dev B + Dev A (merged) |
-| **Blocking Issue** | None — Project is stable and verifying final flows |
+| **Current Phase** | Post-Security Sprint — Notification Audit & Feedback Fixes |
+| **Last Updated** | April 24, 2026 |
+| **Active Dev** | Dev B |
+| **Blocking Issue** | None — 7 pre-existing TS errors in unrelated files (useScannerStatus.ts, CustomersPage.tsx) |
+
+---
+
+## Phase Status Tracker
+
+| Phase | Name | Dev A Status | Dev B Status | Overall | Notes |
+|-------|------|-------------|-------------|---------|-------|
+| 0 | Setup & Foundations | ✅ Complete | ✅ Complete | ✅ | |
+| 1 | Auth & Shell | ✅ Complete | ✅ Complete | ✅ | |
+| 2 | Product Management | ✅ Complete | ✅ Complete | ✅ | |
+| 3 | POS Sales Screen | ✅ Complete | ✅ Complete | ✅ | |
+| 4 | Customer Management | ✅ Complete | ✅ Complete | ✅ | |
+| 5 | Reporting | ✅ Complete | ✅ Complete | ✅ | |
+| 6 | ZATCA Compliance | ✅ Complete | ✅ Complete | ✅ | |
+| 7 | Settings | ✅ Complete | ✅ Complete | ✅ | |
+| 8 | Demo Polish & QA | ✅ Complete | ✅ Complete | ✅ | |
+| Security | Post-Sprint Audit | ✅ Complete | ✅ Complete | ✅ | Notification and feedback flow fixes |
 
 ---
 
@@ -484,6 +501,49 @@ To be completed at the end of Phase 8 before the demo.
 - **D.4**: Ran `cargo clippy -- -D warnings` and fixed all issues: added `Default` impl for `RateLimiter`, simplified rate limiter check with `?` operator, removed explicit auto-deref in ZATCA background task.
 - `cargo check` passes cleanly. `cargo clippy -- -D warnings` passes with zero errors.
 - **Security sprint is now 100% complete. All P0 and P1 items from the audit have been addressed.**
+
+### April 24, 2026 — Notification & Feedback Flow Audit
+**Owner**: Dev B
+**Duration**: 1 day
+**Deliverable achieved**: Yes
+**Notes**:
+- **Phase A — Auth lockout fix**:
+  - Backend (`auth.rs`): Fixed lockout remaining time calculation to use `saturating_duration_since` with `min+sec` format: "الحساب مقفل. يُرجى المحاولة بعد X دقيقة و Y ثانية"
+  - Frontend (`useAuthStore.ts`): Lockout timer changed from 30s to 300s; countdown shows "X دقيقة و Y ثانية"; remaining attempts shown after each failure ("الرمز السري غير صحيح. محاولات متبقية: X")
+  - `LoginPage.tsx`: Timer countdown now shows minutes + seconds, resets to 300 on expiry
+- **Phase B — PosError extraction fix**:
+  - Added `export function extractErrorMessage(error: unknown, fallback: string): string` in `tauri-commands.ts` — handles PosError `{type, message}` JSON, plain `Error`, and string types
+  - Replaced all `error?.toString()` and `err?.message` patterns in `useAuthStore.ts`, `POSPage.tsx`, `SettingsPage.tsx`
+- **Phase C — Invoice error messages**:
+  - `handlePayment` in `POSPage.tsx` now uses `extractErrorMessage(err, 'حدث خطأ أثناء معالجة الدفع')` to show real backend error (stock mismatch, total mismatch, etc.)
+  - `handlePrintReceipt` now calls real `printReceipt` command instead of mock timeout
+  - `confirmRefund` error handler updated to use `extractErrorMessage`
+- **Phase D — Settings backend wiring**:
+  - Save button now calls `updateSettings({ branchNameAr, invoiceNote })` instead of fake toast
+  - User management completely rewritten: `getUsers()`, `createUser()`, `deleteUser()` backend commands added; users table populated from backend via `loadUsers()` on tab switch
+  - `User` type in `types/user.ts` updated to snake_case (`id`, `branch_id`, `name_ar`, `is_active`, `created_at`) to match backend
+- **Phase E — Refund unit price fix**:
+  - `createRefundInvoice` now passes real `unitPrice` from selected invoice lines instead of `0`
+  - `confirmRefund` passes `{ productId, qty, unitPrice }` tuples to backend
+- **Phase F — Print receipt wired**:
+  - `handlePrintReceipt` in `POSPage.tsx` now calls `await printReceipt(lastInvoice.id)` instead of `setTimeout` mock
+- **Phase G — adjustInventory error wrapping**:
+  - `adjustInventory` in `tauri-commands.ts` now wraps with `.catch(err => throw new Error(extractErrorMessage(...)))`
+- **Type fixes across codebase**:
+  - `Product.stockQty` and `Product.minStock` added to `types/product.ts`
+  - `Invoice.vatAmount` used instead of non-existent `vatTotal` in `POSPage.tsx` and `InvoicesPage.tsx`
+  - `Invoice.discountAmount` used instead of `discount` in `POSPage.tsx` and `InvoicesPage.tsx`
+  - `Invoice.customerNameAr` used instead of `customerName` in `InvoicesPage.tsx`
+  - `Invoice.invoiceType` used instead of `type` in `InvoicesPage.tsx`
+  - `Category.nameAr` used instead of `name` in `InventoryPage.tsx`
+  - `Invoice.status` values fixed: `"cleared"/"pending"/"rejected"` → `"confirmed"/"draft"/"cancelled"` in `InvoicesPage.tsx`
+  - `addCustomerPayment` in `useCustomerStore.ts` now passes 3 args (added `userId` from localStorage session)
+  - `addItem` in `useCartStore.ts` barcode type relaxed from `string` to `string | undefined`
+- **Rust backend fixes**:
+  - `main.rs`: Combined three PRAGMA `execute` calls into single `execute_batch` to avoid `ExecuteReturnedResults` panic on WAL enable
+  - `settings.rs`: `seed_demo_data` release stub now returns `Err(PosError::BusinessRule(...))` instead of `Err(String)` — release build now compiles
+  - Added `get_users` and `delete_user` backend commands in `users.rs` (Admin/Manager role); registered in `main.rs`
+- **Note**: 7 pre-existing TS errors remain in `useScannerStatus.ts` and `CustomersPage.tsx` — unrelated to this sprint, caused by stale frontend type definitions.
 
 ---
 

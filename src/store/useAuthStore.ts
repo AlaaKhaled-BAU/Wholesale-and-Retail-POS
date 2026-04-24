@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { User, Session } from '../types';
 import { loginUser, logoutUser, openCashierSession } from '../lib/tauri-commands';
+import { extractErrorMessage } from '../lib/tauri-commands';
 import { useToastStore } from '../hooks/useToast';
 
 interface AuthState {
-  user: User | null;
-  session: Session | null;
+  user: { id: string; name: string; role: string; branchId: string } | null;
+  session: { token: string; user: { id: string; name: string; role: string; branchId: string } } | null;
   isAuthenticated: boolean;
   isLocked: boolean;
   failedAttempts: number;
@@ -34,7 +34,7 @@ export const useAuthStore = create<AuthState>()(
           const result = await loginUser(pin);
 
           if (result && result.user) {
-            const session: Session = {
+            const session = {
               token: result.token,
               user: result.user,
             };
@@ -63,18 +63,20 @@ export const useAuthStore = create<AuthState>()(
 
           if (newFailedAttempts >= 5) {
             set({ isLocked: true });
-            useToastStore.getState().addToast('تم قفل الحساب لمدة 30 ثانية', 'error');
+            useToastStore.getState().addToast('تم قفل الحساب لمدة 5 دقائق', 'error', 0);
             setTimeout(() => {
               set({ isLocked: false, failedAttempts: 0 });
-            }, 30000);
+            }, 300_000); // 5 minutes — must match backend lock duration
           } else {
-            useToastStore.getState().addToast('الرمز السري غير صحيح', 'error');
+            const remaining = 5 - newFailedAttempts;
+            useToastStore.getState().addToast(`الرمز السري غير صحيح. محاولات متبقية: ${remaining}`, 'error');
           }
 
           return false;
-        } catch (error: any) {
+        } catch (error: unknown) {
           set({ isLoading: false });
-          useToastStore.getState().addToast(error?.toString() || 'حدث خطأ أثناء تسجيل الدخول', 'error');
+          const msg = extractErrorMessage(error, 'حدث خطأ أثناء تسجيل الدخول');
+          useToastStore.getState().addToast(msg, 'error');
           return false;
         }
       },

@@ -22,6 +22,8 @@ export interface Product {
   vatRate: number;
   isActive: boolean;
   stock?: number;
+  stockQty?: number;
+  minStock?: number;
   createdAt: string;
 }
 

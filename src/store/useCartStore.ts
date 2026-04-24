@@ -13,7 +13,7 @@ interface CartState {
   addItem: (product: {
     id: string;
     nameAr: string;
-    barcode: string;
+    barcode?: string;
     sellPrice: number;
     vatRate: number;
   }) => void;
@@ -66,7 +66,7 @@ export const useCartStore = create<CartState>()(
           const newItem: CartItem = {
             productId: product.id,
             name: product.nameAr,
-            barcode: product.barcode,
+            barcode: product.barcode ?? '',
             qty: 1,
             unitPrice: product.sellPrice,
             discountPercent: 0,

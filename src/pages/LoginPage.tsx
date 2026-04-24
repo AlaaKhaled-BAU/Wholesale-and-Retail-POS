@@ -8,7 +8,7 @@ export default function LoginPage() {
   const { login, isLocked, failedAttempts, resetFailedAttempts, isLoading } = useAuthStore();
   const [pin, setPin] = useState('');
   const [shake, setShake] = useState(false);
-  const [lockoutTimer, setLockoutTimer] = useState(30);
+  const [lockoutTimer, setLockoutTimer] = useState(300);
 
   useEffect(() => {
     if (isLocked) {
@@ -17,7 +17,7 @@ export default function LoginPage() {
           if (prev <= 1) {
             clearInterval(interval);
             resetFailedAttempts();
-            return 30;
+            return 300;
           }
           return prev - 1;
         });
@@ -77,9 +77,9 @@ export default function LoginPage() {
             <div className="text-destructive-600 font-semibold text-lg mb-2">
               الحساب مقفل مؤقتاً
             </div>
-            <div className="text-gray-500">
-              يرجى الانتظار {lockoutTimer} ثانية
-            </div>
+<div className="text-gray-500">
+                يرجى الانتظار {Math.floor(lockoutTimer / 60)} دقيقة و {lockoutTimer % 60} ثانية
+              </div>
           </div>
         ) : (
           <>

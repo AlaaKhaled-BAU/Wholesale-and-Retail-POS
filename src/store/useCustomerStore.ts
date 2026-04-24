@@ -61,9 +61,11 @@ export const useCustomerStore = create<CustomerState>((set, get) => ({
   recordPayment: async (customerId: string, amount: number) => {
     set({ isLoading: true, error: null });
     try {
-      await addCustomerPayment(customerId, amount);
+      const sessionJson = localStorage.getItem('pos-session');
+      const session = sessionJson ? JSON.parse(sessionJson) : null;
+      const userId = session?.user?.id || '';
+      await addCustomerPayment(customerId, amount, userId);
       set({ isLoading: false });
-      // Refresh customers to get updated balance
       await get().fetchCustomers();
     } catch (error) {
       set({ error: 'فشل في تسجيل الدفع', isLoading: false });

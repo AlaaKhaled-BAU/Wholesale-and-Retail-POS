@@ -106,10 +106,12 @@ impl RateLimiter {
 
         if let Some(locked) = entry.locked_until {
             if Instant::now() < locked {
-                let remaining = locked.duration_since(Instant::now()).as_secs() / 60;
+                let remaining_secs = locked.saturating_duration_since(Instant::now()).as_secs();
+                let remaining_minutes = remaining_secs / 60;
+                let remaining_seconds = remaining_secs % 60;
                 return Err(PosError::AccountLocked(format!(
-                    "الحساب مقفل مؤقتاً. يُرجى المحاولة بعد {} دقيقة",
-                    remaining
+                    "الحساب مقفل. يُرجى المحاولة بعد {} دقيقة و {} ثانية",
+                    remaining_minutes, remaining_seconds
                 )));
             }
             entry.locked_until = None;
