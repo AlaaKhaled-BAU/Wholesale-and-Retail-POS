@@ -66,7 +66,7 @@ export const useAuthStore = create<AuthState>()(
             useToastStore.getState().addToast('تم قفل الحساب لمدة 5 دقائق', 'error', 0);
             setTimeout(() => {
               set({ isLocked: false, failedAttempts: 0 });
-            }, 300_000); // 5 minutes — must match backend lock duration
+            }, 300_000);
           } else {
             const remaining = 5 - newFailedAttempts;
             useToastStore.getState().addToast(`الرمز السري غير صحيح. محاولات متبقية: ${remaining}`, 'error');

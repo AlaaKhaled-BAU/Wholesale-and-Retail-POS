@@ -561,6 +561,23 @@ To be completed at the end of Phase 8 before the demo.
   - Fix: catch block in `login()` now checks `error.type === 'AccountLocked'` directly from the raw error object. If matched, sets `isLocked: true`, `failedAttempts: 5`, shows backend Arabic lockout message, and starts 5-minute countdown.
   - Build: `✓ built in 700ms`
 
+### April 24, 2026 — Desktop-Only Conversion + Notification Fix
+**Owner**: Dev B
+**Duration**: 1 session
+**Deliverable achieved**: Yes
+**Notes**:
+- **extractErrorMessage fix**:
+  - Tauri wraps `PosError` as a JavaScript `Error` object where `Error.message` contains the full JSON string: `{"type":"InvalidCredentials","message":"رقم التعريف غير صحيح"}`
+  - The old code returned `error.message` which was the full JSON string — showing `{"type":"InvalidCredentials"}` in the toast
+  - New logic: if `msg.startsWith('{')`, parse as JSON and extract `.message` field. This returns the Arabic text correctly
+  - Also handles the case where `message` field is absent but `type` is present — falls back to `خطأ: {type}` instead of raw JSON
+- **tauri.conf.json stripped**:
+  - Removed `beforeDevCommand`, `beforeBuildCommand`, `devUrl`, `frontendDist` from the `build` section
+  - `pnpm tauri dev` now builds Rust and opens the window with the existing `dist/` folder — no more `localhost:5173` subprocess
+  - `pnpm tauri build` produces a standalone desktop binary with embedded frontend assets
+  - The app is now 100% desktop — no Vite dev server running at any point
+- **Build verified**: `cargo clippy -- -D warnings` passes; `pnpm run build` passes; `cargo build` passes
+
 ---
 
 ## Upcoming Milestones

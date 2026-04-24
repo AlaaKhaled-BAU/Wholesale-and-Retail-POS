@@ -33,9 +33,26 @@ export function extractErrorMessage(error: unknown, fallback: string): string {
   if (typeof error === 'string') return error || fallback;
   if (typeof error === 'object') {
     if ('message' in error && typeof (error as Record<string, unknown>).message === 'string') {
-      return (error as { message: string }).message;
+      const msg = (error as { message: string }).message;
+      // Tauri wraps PosError JSON in Error.message — parse it if it looks like JSON
+      if (msg.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(msg) as { type?: string; message?: string };
+          if (parsed.message) return parsed.message;
+          if (parsed.type) return `خطأ: ${parsed.type}`;
+        } catch {
+          // Not JSON — return as-is
+        }
+      }
+      return msg || fallback;
     }
-    if ('type' in error) {
+    // Direct PosError object with type and message fields
+    const obj = error as Record<string, unknown>;
+    if ('type' in obj && 'message' in obj) {
+      const msg = obj.message;
+      if (typeof msg === 'string' && msg) return msg;
+    }
+    if ('type' in obj) {
       return JSON.stringify(error);
     }
   }

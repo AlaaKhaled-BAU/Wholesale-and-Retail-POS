@@ -4,10 +4,6 @@
   "version": "0.1.0",
   "identifier": "com.wholesale.pos.app",
   "build": {
-    "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build",
-    "frontendDist": "../dist",
-    "devUrl": "http://localhost:5173"
   },
   "app": {
     "windows": [
