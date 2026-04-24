@@ -114,7 +114,7 @@ pub async fn seed_demo_data(state: State<'_, AppState>) -> Result<(), PosError> 
 
     #[cfg(not(debug_assertions))]
     {
-        Err("غير مسموح في الإصدار النهائي".to_string())
+        Err(PosError::BusinessRule("غير مسموح في الإصدار النهائي".to_string()))
     }
 }
 

@@ -33,12 +33,8 @@ fn main() {
             let conn = rusqlite::Connection::open(&db_path)
                 .expect("could not open database");
 
-            conn.execute("PRAGMA foreign_keys = ON", [])
-                .expect("could not enable foreign keys");
-            conn.execute("PRAGMA journal_mode = WAL", [])
-                .expect("could not enable WAL mode");
-            conn.execute("PRAGMA synchronous = NORMAL", [])
-                .expect("could not set synchronous mode");
+            conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")
+                .expect("could not configure database");
 
             let schema = include_str!("db/schema.sql");
             conn.execute_batch(schema)
