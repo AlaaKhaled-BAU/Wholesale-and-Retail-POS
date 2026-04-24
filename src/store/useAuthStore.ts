@@ -75,8 +75,19 @@ export const useAuthStore = create<AuthState>()(
           return false;
         } catch (error: unknown) {
           set({ isLoading: false });
-          const msg = extractErrorMessage(error, 'حدث خطأ أثناء تسجيل الدخول');
-          useToastStore.getState().addToast(msg, 'error');
+          const raw = error as Record<string, unknown> | null;
+          if (raw && raw.type === 'AccountLocked') {
+            // Backend lockout — show lockout UI with countdown
+            set({ isLocked: true, failedAttempts: 5 });
+            useToastStore.getState().addToast(
+              (raw.message as string) || 'الحساب مقفل مؤقتاً',
+              'error',
+              0,
+            );
+          } else {
+            const msg = extractErrorMessage(error, 'حدث خطأ أثناء تسجيل الدخول');
+            useToastStore.getState().addToast(msg, 'error');
+          }
           return false;
         }
       },

@@ -7,7 +7,7 @@ import type { Customer, CustomerInput } from '../types';
 
 export default function CustomersPage() {
   const toast = useToast();
-  const { customers, selectedCustomer, addCustomer, addPayment, selectCustomer } = useCustomerStore();
+  const { customers, selectedCustomer, addCustomer, recordPayment, selectCustomer } = useCustomerStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
@@ -83,7 +83,7 @@ export default function CustomersPage() {
     if (!selectedCustomer || !paymentAmount) return;
     setIsPaying(true);
     try {
-      await addPayment(selectedCustomer.id, parseFloat(paymentAmount));
+      await recordPayment(selectedCustomer.id, parseFloat(paymentAmount));
       setPaymentAmount('');
       setShowPaymentModal(false);
       toast.success('تم تسجيل الدفعة بنجاح');

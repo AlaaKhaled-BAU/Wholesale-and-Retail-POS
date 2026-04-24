@@ -5,12 +5,14 @@
 export interface Customer {
   id: string;
   nameAr: string;
+  nameEn?: string;
   phone?: string;
   vatNumber?: string;
   crNumber?: string;
   creditLimit: number;
   balance: number;
   customerType: 'b2c' | 'b2b';
+  address?: string;
   createdAt: string;
 }
 

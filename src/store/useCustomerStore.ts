@@ -9,16 +9,19 @@ import {
 
 interface CustomerState {
   customers: Customer[];
+  selectedCustomer: Customer | null;
   isLoading: boolean;
   error: string | null;
   fetchCustomers: (query?: string) => Promise<void>;
   addCustomer: (customer: CustomerInput) => Promise<void>;
   updateCustomer: (id: string, customer: CustomerInput) => Promise<void>;
   recordPayment: (customerId: string, amount: number) => Promise<void>;
+  selectCustomer: (customer: Customer | null) => void;
 }
 
 export const useCustomerStore = create<CustomerState>((set, get) => ({
   customers: [],
+  selectedCustomer: null,
   isLoading: false,
   error: null,
 
@@ -70,5 +73,9 @@ export const useCustomerStore = create<CustomerState>((set, get) => ({
     } catch (error) {
       set({ error: 'فشل في تسجيل الدفع', isLoading: false });
     }
+  },
+
+  selectCustomer: (customer: Customer | null) => {
+    set({ selectedCustomer: customer });
   },
 }));

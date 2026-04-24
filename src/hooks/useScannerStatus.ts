@@ -66,7 +66,7 @@ export function useScannerStatus() {
     if (!isTauriRef.current) return;
     try {
       const { checkScannerConnected } = await import('../lib/tauri-commands');
-      const result = await checkScannerConnected();
+      const result = await checkScannerConnected() as { connected: boolean; deviceName?: string };
       setStatus(result.connected ? 'connected' : 'disconnected');
       if (result.deviceName) setDeviceName(result.deviceName);
     } catch {
