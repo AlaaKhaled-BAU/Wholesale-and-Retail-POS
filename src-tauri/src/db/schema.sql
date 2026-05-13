@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS settings (
 -- ========================================
 CREATE TABLE IF NOT EXISTS zatca_queue (
   id          TEXT PRIMARY KEY,
-  invoice_id  TEXT REFERENCES invoices(id),
+  invoice_id  TEXT UNIQUE REFERENCES invoices(id),
   queued_at   TEXT DEFAULT (datetime('now')),
   attempts    INTEGER DEFAULT 0 CHECK(attempts >= 0),
   last_error  TEXT,

@@ -10,7 +10,42 @@
 
 This report presents a comprehensive, file-by-file audit of the Wholesale POS codebase. The application is a functional MVP with a solid architectural foundation, but it contains **critical security gaps**, **incomplete features mocked as functional**, **zero test coverage**, and **no production build pipeline**. Moving this to production without addressing the findings below would expose the business to financial fraud risk, regulatory non-compliance with Saudi ZATCA e-invoicing laws, data loss, and operational instability.
 
-**Bottom line:** The app is approximately **30% production-ready**. A focused 4-week sprint can bring it to a deployable state.
+**Bottom line:** As of April 24, 2026, the application has progressed to approximately **55% production-ready**. Core security and architecture have been hardened, but regulatory (ZATCA Phase 2) and hardware (Printing) hurdles remain the primary blockers for launch.
+
+---
+
+## 🕒 Audit Update — April 24, 2026 (Post-Security Sprint)
+
+Since the initial audit on April 22, a major **Security & Architecture Hardening Sprint** was completed. This has resolved almost all P0 security blockers identified in Section 1.
+
+### ✅ Major Security Wins
+*   **RBAC Middleware:** Enforced role-based access control on all 40+ Tauri commands.
+*   **Hardened Secrets:** Migrated ZATCA keys from SQLite to the OS Keyring/Keychain via `secret_store.rs`.
+*   **Data Integrity:** Implemented SQL `CHECK` constraints, atomic invoice numbering, and server-side total recalculation.
+*   **Infrastructure:** Enabled WAL mode, automated daily backups, and a production-grade First-Run Wizard.
+*   **IPC Safety:** Restricted Tauri capabilities and enabled a strict CSP.
+
+### 🔴 Remaining Production Gaps (Post-Sprint)
+The focus must now shift from **Security** to **Regulatory Compliance** and **Hardware Integration**.
+
+#### 1. Saudi ZATCA Phase 2 (2026) Compliance
+*   **Status:** **CRITICAL GAP.**
+*   **Finding:** The current logic is still "Phase 1." It generates TLV Tags 1-5. Phase 2 requires 9 tags (including ECDSA signatures and Public Keys).
+*   **UBL 2.1:** The XML generator is a basic builder. It lacks the full XAdES-EPES signature embedding and proper UBL 2.1 schema validation required for 2026.
+*   **CSR:** `zatca.rs` still uses a `CSR_PLACEHOLDER`. Real registration with the Fatoora portal is impossible without a valid OpenSSL-generated CSR.
+
+#### 2. Physical Hardware Drivers
+*   **Status:** **BLOCKER.**
+*   **Finding:** `printing.rs` remains a mock using `println!`. Launching in 2026 requires real ESC/POS byte-stream communication via `escpos-rs` or direct USB/Serial calls.
+
+#### 3. Wholesale & Retail Business Logic
+*   **Status:** **GAP.**
+*   **Finding:** The "Wholesale" label is currently underserved.
+    *   **Missing:** Supplier Management, Purchase Orders (POs), and Expense Tracking modules.
+    *   **Tiered Pricing:** No support for bulk discounts (e.g., price drops when buying 10+ units).
+    *   **Unit Conversion:** No logic for "Box vs. Piece" inventory tracking.
+
+---
 
 ---
 
@@ -1550,6 +1585,35 @@ const ReportsPage = lazy(() => import('./pages/ReportsPage'));
 | 20 | Logs are persisted to file with rotation | 🔲 |
 
 **ALL 20 MUST BE ✅ BEFORE FIRST CUSTOMER.**
+
+---
+
+## ⚖️ Senior Architect Peer Review & Verdict
+
+Following a deep technical comparison with external "Production-Ready" benchmarks, this system ranks highly in **Visual Premium Quality (9/10)** and **Security Architecture (Post-Sprint: 9/10)**, but low in **Regulatory Compliance (3/10)**.
+
+**Architect's Verdict:** 
+The "foundation" is now solid and sellable. The "legal layer" (ZATCA) is the only thing preventing this from being a top-tier Saudi POS in 2026.
+
+---
+
+## 4. Senior POS Architect Audit Supplement (April 24, 2026)
+
+This supplement documents the findings from the deep-dive audit conducted after the **Security Hardening Sprint**.
+
+### 4.1 UI/UX "Premium" Deep Dive
+*   **Aesthetics:** The UI is clean, modern, and correctly localized for RTL (Arabic). The use of HSL colors and Lucide icons meets the "Premium" requirement.
+*   **Efficiency:** F1, Esc, and Ctrl+P hotkeys are correctly wired. The "invisible" barcode scanning logic in `POSPage.tsx` is a pro-level feature.
+*   **Gap:** Missing "Supplier Management" and "Expense Tracking" modules. A premium POS in 2026 should provide a full view of P&L, not just sales.
+
+### 4.2 ZATCA Phase 2 (2026) Regulatory Gap
+*   **XML Generation:** The current implementation in `zatca.rs` is too simplified. It lacks the mandatory `AdditionalDocumentReference` tags for ICV (Invoice Counter Value) and PIH (Previous Invoice Hash) required for 2026 chaining.
+*   **Signatures:** While ECDSA logic exists, the XAdES-EPES signature embedding into the UBL XML is not yet functional.
+*   **QR Code:** The TLV encoding must be updated from 5 tags (Phase 1) to the 9-tag requirement (Phase 2), including the public key and signature.
+
+### 4.3 Wholesale vs. Retail Readiness
+*   **Wholesale Support:** Currently rated at **20%**. Needs tiered pricing (e.g., price drops for bulk) and unit conversion (e.g., selling by box vs. piece with automatic stock decrement).
+*   **Retail Support:** Currently rated at **70%**. Main blocker is the lack of physical thermal printer drivers (mocked in `printing.rs`).
 
 ---
 

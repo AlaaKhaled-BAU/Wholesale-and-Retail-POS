@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Printer, Eye, FileText, CheckCircle2, Clock, XCircle, CalendarDays, X, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Search, Printer, Eye, FileText, CheckCircle2, Clock, XCircle, CalendarDays, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useInvoiceStore } from '../store/useInvoiceStore';
 import { useToast } from '../hooks/useToast';
 import { cn } from '../lib/utils';
@@ -36,7 +36,7 @@ export default function InvoicesPage() {
   const filteredInvoices = invoices.filter((inv) => {
     const matchesSearch =
       inv.invoiceNumber.includes(searchQuery) ||
-      inv.customerName?.includes(searchQuery);
+      inv.customerNameAr?.includes(searchQuery);
 
     let matchesDate = true;
     const invDate = new Date(inv.createdAt).toISOString().split('T')[0];
@@ -73,9 +73,9 @@ export default function InvoicesPage() {
 
   const tabs = [
     { key: 'all', label: 'الكل', count: invoices.length },
-    { key: 'cleared', label: 'مُبلَّغ', count: invoices.filter((i) => i.status === 'cleared').length },
-    { key: 'pending', label: 'معلق', count: invoices.filter((i) => i.status === 'pending').length },
-    { key: 'rejected', label: 'مرفوض', count: invoices.filter((i) => i.status === 'rejected').length },
+    { key: 'cleared', label: 'مُبلَّغ', count: invoices.filter((i) => i.zatcaStatus === 'reported').length },
+    { key: 'pending', label: 'معلق', count: invoices.filter((i) => i.zatcaStatus === 'pending').length },
+    { key: 'rejected', label: 'مرفوض', count: invoices.filter((i) => i.zatcaStatus === 'rejected').length },
   ];
 
   return (
@@ -177,14 +177,14 @@ export default function InvoicesPage() {
             </thead>
             <tbody className="divide-y divide-[#e2e1ec]">
               {paginatedInvoices.map((invoice) => {
-                const status = statusConfig[invoice.status] || statusConfig.draft;
+                const status = statusConfig[invoice.zatcaStatus as keyof typeof statusConfig] || statusConfig.draft;
                 const StatusIcon = status.icon;
-                const typeBadge = typeConfig[invoice.type] || typeConfig.simplified;
+                const typeBadge = typeConfig[invoice.invoiceType as keyof typeof typeConfig] || typeConfig.simplified;
                 return (
                   <tr key={invoice.id} className="hover:bg-[#f4f2fd] transition-colors">
                     <td className="px-6 py-4 text-sm font-bold text-[#1a1b22]">{invoice.invoiceNumber}</td>
                     <td className="px-6 py-4 text-sm text-[#555f70]">{formatDate(invoice.createdAt)}</td>
-                    <td className="px-6 py-4 text-sm text-[#1a1b22] font-medium">{invoice.customerName || 'عميل نقدي'}</td>
+                    <td className="px-6 py-4 text-sm text-[#1a1b22] font-medium">{invoice.customerNameAr || 'عميل نقدي'}</td>
                     <td className="px-6 py-4">
                       <span className={cn(
                         'inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold',
@@ -307,15 +307,15 @@ export default function InvoicesPage() {
                   <span className="text-[#747685]">المجموع الفرعي:</span>
                   <span className="font-medium">{selectedInvoice.subtotal.toFixed(2)} ر.س</span>
                 </div>
-                {selectedInvoice.discount > 0 && (
+                {selectedInvoice.discountAmount > 0 && (
                   <div className="flex justify-between text-sm text-success-600">
                     <span>الخصم:</span>
-                    <span className="font-medium">-{selectedInvoice.discount.toFixed(2)} ر.س</span>
+                    <span className="font-medium">-{selectedInvoice.discountAmount.toFixed(2)} ر.س</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
                   <span className="text-[#747685]">ضريبة القيمة المضافة:</span>
-                  <span className="font-medium">{selectedInvoice.vatTotal.toFixed(2)} ر.س</span>
+                  <span className="font-medium">{selectedInvoice.vatAmount.toFixed(2)} ر.س</span>
                 </div>
                 <div className="flex justify-between text-lg font-bold pt-2 border-t border-[#e2e1ec]">
                   <span>الإجمالي:</span>

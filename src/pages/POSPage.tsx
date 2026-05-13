@@ -2,14 +2,13 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Search, ShoppingCart, UserPlus, PauseCircle, RotateCcw, Trash2, Plus, Minus,
   CreditCard, Percent, Loader2, Receipt, Printer, CheckCircle2, Package,
-  Bell, Coffee, IceCream, Cookie, Croissant
+  Coffee, IceCream, Cookie, Croissant
 } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore';
 import { useProductStore } from '../store/useProductStore';
 import { useCustomerStore } from '../store/useCustomerStore';
 import { useInvoiceStore } from '../store/useInvoiceStore';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { useAuthStore } from '../store/useAuthStore';
 import { useToast } from '../hooks/useToast';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { cn } from '../lib/utils';
@@ -856,15 +855,15 @@ export default function POSPage() {
                 <span className="text-[#747685]">المجموع الفرعي:</span>
                 <span className="font-medium">{lastInvoice.subtotal.toFixed(2)} ر.س</span>
               </div>
-              {lastInvoice.discount > 0 && (
+              {lastInvoice.discountAmount > 0 && (
                 <div className="flex justify-between text-sm text-success-600">
                   <span>الخصم:</span>
-                  <span>-{lastInvoice.discount.toFixed(2)} ر.س</span>
+                  <span>-{lastInvoice.discountAmount.toFixed(2)} ر.س</span>
                 </div>
               )}
               <div className="flex justify-between text-sm">
                 <span className="text-[#747685]">الضريبة:</span>
-                <span className="font-medium">{lastInvoice.vatTotal.toFixed(2)} ر.س</span>
+                <span className="font-medium">{lastInvoice.vatAmount.toFixed(2)} ر.س</span>
               </div>
               <div className="flex justify-between text-lg font-bold pt-2 border-t border-[#e2e1ec]">
                 <span>الإجمالي:</span>

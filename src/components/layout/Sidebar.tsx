@@ -29,10 +29,9 @@ const footerNavItems = [
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
-  onOpen: () => void;
 }
 
-export default function Sidebar({ isOpen, onClose, onOpen }: SidebarProps) {
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
 

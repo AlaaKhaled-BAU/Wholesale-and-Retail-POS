@@ -15,7 +15,6 @@ export default function AppShell({ children }: AppShellProps) {
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        onOpen={() => setSidebarOpen(true)}
       />
 
       {/* Main content area with sidebar offset */}

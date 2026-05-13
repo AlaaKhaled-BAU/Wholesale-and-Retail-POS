@@ -23,6 +23,8 @@ export interface Product {
   isActive: boolean;
   stock?: number;
   createdAt: string;
+  stockQty?: number;
+  minStock?: number;
 }
 
 export interface NewProduct {

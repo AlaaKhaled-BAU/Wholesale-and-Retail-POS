@@ -10,6 +10,7 @@ use tauri::State;
 use uuid::Uuid;
 use std::io::Cursor;
 use ring::rand::SecureRandom;
+use base64::{Engine as _, engine::general_purpose};
 
 // ============================================================
 // Machine-bound key encryption for ZATCA private key
@@ -147,7 +148,7 @@ async fn check_zatca_compliance(otp: &str, csr_base64: &str) -> Result<String, S
     let client = reqwest::Client::new();
     let response = client
         .post(&format!("{}/compliance", get_zatca_base_url()))
-        .header("Authorization", format!("Basic {}", base64::encode(otp)))
+        .header("Authorization", format!("Basic {}", general_purpose::STANDARD.encode(otp)))
         .header("Content-Type", "application/json")
         .json(&serde_json::json!({ "csr": csr_base64 }))
         .send()
@@ -173,7 +174,7 @@ async fn get_csid(otp: &str, request_id: &str) -> Result<(String, String), Strin
     let client = reqwest::Client::new();
     let response = client
         .post(&format!("{}/compliance/seals", get_zatca_base_url()))
-        .header("Authorization", format!("Basic {}", base64::encode(otp)))
+        .header("Authorization", format!("Basic {}", general_purpose::STANDARD.encode(otp)))
         .header("Content-Type", "application/json")
         .json(&serde_json::json!({ "requestID": request_id }))
         .send()
@@ -228,11 +229,11 @@ pub async fn register_zatca_device(
             .map_err(|_| "لا يوجد فرع".to_string())?;
 
         let csr = generate_csr(&private_key, &branch)?;
-        let csr_b64 = base64::encode(&csr);
+        let csr_b64 = general_purpose::STANDARD.encode(&csr);
 
         conn.execute(
             "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
-            params!["zatca_private_key_encrypted", base64::encode(&encrypt_for_storage(&private_key, &derive_key_from_machine()))],
+            params!["zatca_private_key_encrypted", general_purpose::STANDARD.encode(&encrypt_for_storage(&private_key, &derive_key_from_machine()))],
         )
         .map_err(|e| e.to_string())?;
 
@@ -528,7 +529,7 @@ fn write_xml_element(writer: &mut Writer<Cursor<Vec<u8>>>, name: &str, value: &s
 // ============================================================
 fn hash_invoice_xml(xml: &str) -> String {
     let hash = ring::digest::digest(&ring::digest::SHA256, xml.as_bytes());
-    base64::encode(hash.as_ref())
+    general_purpose::STANDARD.encode(hash.as_ref())
 }
 
 // ============================================================
@@ -547,7 +548,7 @@ fn sign_invoice_hash(hash: &[u8], private_key_pkcs8: &[u8]) -> Result<String, St
         .sign(&rng, hash)
         .map_err(|e| format!("فشل التوقيع: {:?}", e))?;
 
-    Ok(base64::encode(signature.as_ref()))
+    Ok(general_purpose::STANDARD.encode(signature.as_ref()))
 }
 
 // ============================================================
@@ -586,7 +587,7 @@ fn encode_tlv(tag: u8, value: &[u8]) -> Vec<u8> {
 // Task 6.3.4 — QR PNG Generation
 // ============================================================
 fn generate_qr_png(tlv_bytes: &[u8]) -> Result<String, String> {
-    let base64_tlv = base64::encode(tlv_bytes);
+    let base64_tlv = general_purpose::STANDARD.encode(tlv_bytes);
     let code = QrCode::new(base64_tlv.as_bytes()).map_err(|e| e.to_string())?;
     let image = code.render::<image::Luma<u8>>().build();
     let dynamic = DynamicImage::ImageLuma8(image);
@@ -594,7 +595,7 @@ fn generate_qr_png(tlv_bytes: &[u8]) -> Result<String, String> {
     dynamic
         .write_to(&mut Cursor::new(&mut png_bytes), image::ImageFormat::Png)
         .map_err(|e| e.to_string())?;
-    Ok(base64::encode(&png_bytes))
+    Ok(general_purpose::STANDARD.encode(&png_bytes))
 }
 
 // ============================================================
@@ -706,7 +707,7 @@ pub fn generate_and_store_invoice_qr(
         ).optional().ok().flatten();
 
         let key_bytes = key_b64.and_then(|b64| {
-            let encrypted = base64::decode(&b64).ok()?;
+            let encrypted = general_purpose::STANDARD.decode(&b64).ok()?;
             decrypt_from_storage(&encrypted, &machine_key)
         });
 
@@ -765,7 +766,7 @@ async fn submit_invoice_to_zatca_api(
     let client = reqwest::Client::new();
     let response = client
         .post(&format!("{}/invoices/reporting/single", get_zatca_base_url()))
-        .header("Authorization", format!("Basic {}", base64::encode(format!("{}:{}", csid, secret))))
+        .header("Authorization", format!("Basic {}", general_purpose::STANDARD.encode(format!("{}:{}", csid, secret))))
         .header("Content-Type", "application/json")
         .header("Accept-Version", "V2")
         .header("Accept-Language", "en")

@@ -13,6 +13,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useAuthStore } from '../store/useAuthStore';
 import type {
+  User,
   Product,
   ProductInput,
   Customer,
@@ -40,15 +41,17 @@ import type {
 // Auth
 // ============================================================
 
-export const loginUser = async (pin: string): Promise<{ token: string; user: { id: string; name: string; role: string; branchId: string } }> => {
+export const loginUser = async (pin: string): Promise<{ token: string; user: User }> => {
   const result = await invoke<SessionToken>('login_user', { pin });
   return {
     token: result.sessionId,
     user: {
       id: result.userId,
-      name: result.nameAr,
+      nameAr: result.nameAr,
       role: result.role,
       branchId: result.branchId,
+      isActive: true, // Backend SessionToken implies active user
+      createdAt: new Date().toISOString(), // Fallback as SessionToken doesn't include it
     },
   };
 };
@@ -335,7 +338,7 @@ export const getAvailablePorts = () =>
 // ============================================================
 
 export const checkScannerConnected = () =>
-  Promise.resolve({ connected: false }); // No hardware check in MVP
+  Promise.resolve({ connected: false, deviceName: undefined as string | undefined });
 
 // ============================================================
 // ZATCA

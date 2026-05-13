@@ -34,6 +34,10 @@ pub fn login_user(pin: String, state: State<AppState>) -> Result<SessionToken, P
     let mut matched_user: Option<(String, String, String, String)> = None;
 
     for (id, branch_id, name_ar, role, pin_hash) in &users {
+        if let Err(e) = rate_limiter.check("__global__") {
+            return Err(e);
+        }
+
         if let Err(e) = rate_limiter.check(id) {
             if matches!(e, PosError::AccountLocked(_)) {
                 return Err(e);
@@ -58,9 +62,7 @@ pub fn login_user(pin: String, state: State<AppState>) -> Result<SessionToken, P
             })
         }
         None => {
-            for (id, _, _, _, _) in &users {
-                rate_limiter.record_failure(id);
-            }
+            rate_limiter.record_failure("__global__");
             Err(PosError::InvalidCredentials("رقم التعريف غير صحيح".to_string()))
         }
     }

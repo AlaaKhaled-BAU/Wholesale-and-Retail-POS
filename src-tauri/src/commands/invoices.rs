@@ -65,6 +65,13 @@ pub fn create_invoice(
     payload: NewInvoice,
     state: State<AppState>,
 ) -> Result<Invoice, PosError> {
+    create_invoice_inner(payload, &state)
+}
+
+pub fn create_invoice_inner(
+    payload: NewInvoice,
+    state: &AppState,
+) -> Result<Invoice, PosError> {
     let conn = state.db.lock().map_err(|e| PosError::from(e))?;
 
     // Step 1: Begin transaction
@@ -151,7 +158,7 @@ pub fn create_invoice(
                 &payload.branch_id,
                 &payload.session_id,
                 &payload.cashier_id,
-                &payload.customer_id.unwrap_or_default(),
+                &payload.customer_id,
                 &invoice_number,
                 &payload.invoice_type,
                 &payload.subtotal,
@@ -407,7 +414,7 @@ pub fn create_refund_invoice(
                 &branch_id,
                 &session_id,
                 &cashier_id,
-                &customer_id.unwrap_or_default(),
+                &customer_id,
                 &refund_number,
                 -&subtotal,
                 -&vat_amount,
@@ -476,5 +483,89 @@ pub fn create_refund_invoice(
             let _ = conn.execute("ROLLBACK", []);
             Err(PosError::InternalError)
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pos::{AppState, NewInvoice, NewInvoiceLine, NewPayment};
+    use pos::auth::RateLimiter;
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+
+    #[test]
+    fn stress_test_concurrent_invoices() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let schema = include_str!("../db/schema.sql");
+        conn.execute_batch(schema).unwrap();
+
+        // Seed
+        conn.execute("INSERT INTO branches (id, name_ar, vat_number) VALUES ('BR1', 'Test', '123')", []).unwrap();
+        conn.execute("INSERT INTO users (id, branch_id, name_ar, role, pin_hash) VALUES ('USR1', 'BR1', 'User', 'cashier', 'hash')", []).unwrap();
+        conn.execute("INSERT INTO cashier_sessions (id, user_id, branch_id, status, opened_at) VALUES ('SES1', 'USR1', 'BR1', 'open', '2024-01-01')", []).unwrap();
+        conn.execute("INSERT INTO products (id, sku, name_ar, sell_price) VALUES ('PRD1', 'SKU1', 'Prod', 100.0)", []).unwrap();
+        conn.execute("INSERT INTO inventory (id, branch_id, product_id, qty_on_hand) VALUES ('INV1', 'BR1', 'PRD1', 1000.0)", []).unwrap();
+
+        let state = Arc::new(AppState {
+            db: Mutex::new(conn),
+            current_session: Mutex::new(None),
+            settings: Mutex::new(None),
+            rate_limiter: RateLimiter::new(),
+        });
+
+        let num_threads = 10;
+        let iterations = 10;
+        let mut handles = vec![];
+
+        for t in 0..num_threads {
+            let state_clone = Arc::clone(&state);
+            let handle = thread::spawn(move || {
+                for i in 0..iterations {
+                    let payload = NewInvoice {
+                        branch_id: "BR1".to_string(),
+                        branch_prefix: "BR1".to_string(),
+                        cashier_id: "USR1".to_string(),
+                        session_id: "SES1".to_string(),
+                        customer_id: None,
+                        invoice_type: "simplified".to_string(),
+                        lines: vec![NewInvoiceLine {
+                            product_id: "PRD1".to_string(),
+                            product_name_ar: "Prod".to_string(),
+                            qty: 1.0,
+                            unit_price: 100.0,
+                            discount_pct: 0.0,
+                            vat_rate: 0.15,
+                            vat_amount: 15.0,
+                            line_total: 115.0,
+                        }],
+                        payments: vec![NewPayment {
+                            method: "cash".to_string(),
+                            amount: 115.0,
+                            reference: None,
+                        }],
+                        subtotal: 100.0,
+                        discount_amount: 0.0,
+                        vat_amount: 15.0,
+                        total: 115.0,
+                        notes: Some(format!("T{}I{}", t, i)),
+                    };
+
+                    // Call the command directly
+                    create_invoice_inner(payload, &state_clone).unwrap();
+                }
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        
+        let conn_final = state.db.lock().unwrap();
+        let count: i64 = conn_final.query_row("SELECT COUNT(*) FROM invoices", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, (num_threads * iterations) as i64);
+        
+        let last_counter: i64 = conn_final.query_row("SELECT last_number FROM invoice_counters WHERE branch_id = 'BR1'", [], |r| r.get(0)).unwrap();
+        assert_eq!(last_counter, (num_threads * iterations) as i64);
     }
 }

@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/useAuthStore';
-import { useSettingsStore } from './store/useSettingsStore';
 import { useIdleTimer } from './hooks/useIdleTimer';
 import { useToast } from './hooks/useToast';
 import LoginPage from './pages/LoginPage';

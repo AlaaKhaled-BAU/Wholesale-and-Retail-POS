@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Download, Calendar, CalendarRange, CalendarDays, TrendingUp, TrendingDown, Package, Receipt, DollarSign, AlertTriangle, Minus } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, LineChart, Line, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { exportToCSV } from '../lib/csvExport';
 import { useToast } from '../hooks/useToast';
 import { cn } from '../lib/utils';
@@ -240,7 +240,7 @@ export default function ReportsPage() {
                       <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: number) => `${value.toLocaleString()} ر.س`} />
+                  <Tooltip formatter={(value: any) => `${Number(value).toLocaleString()} ر.س`} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="flex flex-wrap justify-center gap-3 mt-2">
@@ -262,7 +262,7 @@ export default function ReportsPage() {
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e1ec" />
                   <XAxis type="number" hide />
                   <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12, fill: '#1a1b22', fontWeight: 600 }} />
-                  <Tooltip formatter={(value: number) => `${value.toLocaleString()} ر.س`} />
+                  <Tooltip formatter={(value: any) => `${Number(value).toLocaleString()} ر.س`} />
                   <Bar dataKey="revenue" fill={CHART_COLORS.primary} radius={[0, 8, 8, 0]} barSize={24} />
                 </BarChart>
               </ResponsiveContainer>
@@ -282,7 +282,7 @@ export default function ReportsPage() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e1ec" />
                   <XAxis dataKey="hour" tick={{ fontSize: 12, fill: '#555f70' }} axisLine={false} tickLine={false} />
                   <YAxis hide />
-                  <Tooltip formatter={(value: number) => `${value.toLocaleString()} ر.س`} />
+                  <Tooltip formatter={(value: any) => `${Number(value).toLocaleString()} ر.س`} />
                   <Area type="monotone" dataKey="sales" stroke={CHART_COLORS.primary} strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -461,7 +461,7 @@ export default function ReportsPage() {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e1ec" />
                 <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#555f70' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 12, fill: '#555f70' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${v / 1000}k`} />
-                <Tooltip formatter={(value: number) => `${value.toLocaleString()} ر.س`} />
+                <Tooltip formatter={(value: any) => `${Number(value).toLocaleString()} ر.س`} />
                 <Area type="monotone" dataKey="sales" name="المبيعات" stroke={CHART_COLORS.primary} strokeWidth={3} fill="url(#colorSales2)" />
                 <Area type="monotone" dataKey="profit" name="الربح" stroke={CHART_COLORS.success} strokeWidth={3} fill="url(#colorProfit)" />
               </AreaChart>

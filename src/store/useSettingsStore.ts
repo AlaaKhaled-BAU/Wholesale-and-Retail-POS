@@ -1,3 +1,4 @@
+// useSettingsStore.ts - Store for application and printer settings
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AppSettings, FrontendAppSettings } from '../types';

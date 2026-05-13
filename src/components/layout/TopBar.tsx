@@ -67,7 +67,7 @@ export default function TopBar({ isSidebarOpen, onMenuClick }: TopBarProps) {
             'w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm',
             'bg-primary-700'
           )}>
-            {user?.name?.charAt(0) || 'U'}
+            {user?.nameAr?.charAt(0) || 'U'}
           </div>
         </div>
       </div>

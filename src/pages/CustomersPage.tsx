@@ -7,7 +7,11 @@ import type { Customer, CustomerInput } from '../types';
 
 export default function CustomersPage() {
   const toast = useToast();
-  const { customers, selectedCustomer, addCustomer, addPayment, selectCustomer } = useCustomerStore();
+  const customers = useCustomerStore((state) => state.customers);
+  const addCustomer = useCustomerStore((state) => state.addCustomer);
+  const recordPayment = useCustomerStore((state) => state.recordPayment);
+  // const fetchCustomers = useCustomerStore((state) => state.fetchCustomers);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
@@ -64,6 +68,8 @@ export default function CustomersPage() {
     setIsSaving(true);
     try {
       if (editingCustomer) {
+        const { updateCustomer } = useCustomerStore.getState();
+        await updateCustomer(editingCustomer.id, formData);
         toast.success('تم تحديث العميل بنجاح');
       } else {
         await addCustomer(formData);
@@ -82,7 +88,7 @@ export default function CustomersPage() {
     if (!selectedCustomer || !paymentAmount) return;
     setIsPaying(true);
     try {
-      await addPayment(selectedCustomer.id, parseFloat(paymentAmount));
+      await recordPayment(selectedCustomer.id, parseFloat(paymentAmount));
       setPaymentAmount('');
       setShowPaymentModal(false);
       toast.success('تم تسجيل الدفعة بنجاح');
@@ -94,7 +100,7 @@ export default function CustomersPage() {
   };
 
   const handleViewDetail = (customer: Customer) => {
-    selectCustomer(customer);
+    setSelectedCustomer(customer);
     setShowDetail(true);
   };
 
@@ -183,7 +189,7 @@ export default function CustomersPage() {
                       {customer.creditLimit > 0 && (
                         <button
                           onClick={() => {
-                            selectCustomer(customer);
+                            setSelectedCustomer(customer);
                             setShowPaymentModal(true);
                           }}
                           className="w-10 h-10 flex items-center justify-center text-[#747685] hover:text-success-600 hover:bg-success-50 rounded-xl transition-colors"

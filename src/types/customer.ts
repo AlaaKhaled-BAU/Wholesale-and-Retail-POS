@@ -12,6 +12,8 @@ export interface Customer {
   balance: number;
   customerType: 'b2c' | 'b2b';
   createdAt: string;
+  nameEn?: string;
+  address?: string;
 }
 
 export interface NewCustomer {

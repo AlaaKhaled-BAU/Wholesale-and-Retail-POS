@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Plus, Pencil, Folder, Package, Loader2, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, Pencil, Folder, Package, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useProductStore } from '../store/useProductStore';
 import { useToast } from '../hooks/useToast';
 import { cn } from '../lib/utils';
@@ -32,7 +32,7 @@ export default function InventoryPage() {
   const filteredProducts = products.filter((product) => {
     const matchesSearch = !searchQuery || 
       product.nameAr.includes(searchQuery) || 
-      product.barcode.includes(searchQuery);
+      (product.barcode || '').includes(searchQuery);
     const matchesCategory = !selectedCategory || product.categoryId === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -48,16 +48,16 @@ export default function InventoryPage() {
     if (product) {
       setEditingProduct(product);
       setFormData({
-        barcode: product.barcode,
+        barcode: product.barcode || '',
         nameAr: product.nameAr,
         nameEn: product.nameEn || '',
-        categoryId: product.categoryId,
+        categoryId: product.categoryId || '',
         unit: product.unit,
         sellPrice: product.sellPrice,
         costPrice: product.costPrice,
         vatRate: product.vatRate,
-        stockQty: product.stockQty,
-        minStock: product.minStock,
+        stockQty: product.stock || 0,
+        minStock: 0, // Not present in Product model
         isActive: product.isActive,
       });
     } else {
@@ -98,7 +98,7 @@ export default function InventoryPage() {
     }
   };
 
-  const lowStockCount = products.filter((p) => p.stockQty <= p.minStock).length;
+  const lowStockCount = products.filter((p) => (p.stock || 0) <= 0).length; // Fallback since minStock missing
 
   return (
     <div className="min-h-full bg-[#F8F9FA] -m-6 p-6 space-y-6">
@@ -154,7 +154,7 @@ export default function InventoryPage() {
         >
           <option value="">جميع الفئات</option>
           {categories.map((cat) => (
-            <option key={cat.id} value={cat.id}>{cat.name}</option>
+            <option key={cat.id} value={cat.id}>{cat.nameAr}</option>
           ))}
         </select>
         <button
@@ -185,7 +185,7 @@ export default function InventoryPage() {
             <tbody className="divide-y divide-[#e2e1ec]">
               {paginatedProducts.map((product) => (
                 <tr key={product.id} className="hover:bg-[#f4f2fd] transition-colors">
-                  <td className="px-6 py-4 text-sm font-medium text-[#1a1b22]">{product.barcode}</td>
+                  <td className="px-6 py-4 text-sm font-medium text-[#1a1b22]">{product.barcode || '-'}</td>
                   <td className="px-6 py-4 text-sm text-[#1a1b22] font-semibold">{product.nameAr}</td>
                   <td className="px-6 py-4 text-sm text-[#555f70]">{product.categoryName}</td>
                   <td className="px-6 py-4 text-sm font-bold text-[#1a1b22]">{product.sellPrice.toFixed(2)} ر.س</td>
@@ -193,11 +193,11 @@ export default function InventoryPage() {
                   <td className="px-6 py-4 text-sm">
                     <div className="flex items-center gap-2">
                       <span className={cn(
-                        product.stockQty <= product.minStock ? 'text-destructive-600 font-bold' : 'text-[#1a1b22] font-medium'
+                        (product.stock || 0) <= 0 ? 'text-destructive-600 font-bold' : 'text-[#1a1b22] font-medium'
                       )}>
-                        {product.stockQty}
+                        {product.stock || 0}
                       </span>
-                      {product.stockQty <= product.minStock && (
+                      {(product.stock || 0) <= 0 && (
                         <span className="px-2 py-1 rounded-full bg-destructive-100 text-destructive-600 text-[10px] font-bold">
                           منخفض
                         </span>
@@ -318,7 +318,7 @@ export default function InventoryPage() {
                   className="w-full px-4 py-3 border border-[#c4c5d6] rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-600 bg-white"
                 >
                   {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    <option key={cat.id} value={cat.id}>{cat.nameAr}</option>
                   ))}
                 </select>
               </div>
